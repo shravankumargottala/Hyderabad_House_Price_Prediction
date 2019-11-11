@@ -24,7 +24,7 @@
     <form action="{{ url_for('plot_predict')}}"method="post">
       
       <div class="form-group">
-        <lable>Project Name :</lable>
+        <lable>Society Name :</lable>
          <select name= "prj_name" method="GET" action="/">
             {% for Prj_Unq in Project_Unq %}
                <option value= "{{Prj_Unq}}" SELECTED>{{Prj_Unq}}</option>"
