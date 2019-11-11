@@ -43,7 +43,7 @@ def house():
 @app.route('/Plot',methods=['GET','POST'])
 def plot():
     if request.method == 'POST':
-        df = pd.read_csv("Hyd_Plot_Price.csv")
+        df = pd.read_csv("https://github.com/shravankumargottala/Hyderabad_House_Price_Prediction/blob/master/Hyd_Plot_Price.csv")
         
         Project_Unq = df.Project_Name.unique()
         for i in range(len(Project_Unq)):
@@ -67,7 +67,7 @@ def plot():
 @app.route('/Flat',methods=['GET','POST'])
 def flat():
     if request.method == 'POST':
-        df = pd.read_csv("Hyd_Flat_Apartment_House_Price.csv")
+        df = pd.read_csv("https://github.com/shravankumargottala/Hyderabad_House_Price_Prediction/blob/master/Hyd_Flat_Apartment_House_Price.csv")
         
         Furn_Uniq = df['Furnished_status'].unique()
         for j in range(len(Furn_Uniq)):
