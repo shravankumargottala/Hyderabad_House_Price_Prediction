@@ -160,7 +160,7 @@ def plot_predict():
         output = round(np.expm1(prediction[0]),2)
 	   
 	   
-        return render_template('plot_result.html', prediction_text='{} Plot Price for the below Specifications will be ₹ {}/- Lacs'.format(addre,output),proj_name='Project Name : {}.'.format(prj_name),plot_area='Plot Area : {} sqr-yards '.format(plt_area),trans_type='Transaction Type : {}.'.format(trn_type),plot_addres='Plot Address : {}, Hyderabad.'.format(addre))
+        return render_template('plot_result.html', prediction_text='{} Plot Price for the below Specifications will be ₹ {}/- Lacs'.format(addre,output),proj_name='Society Name : {}.'.format(prj_name),plot_area='Plot Area : {} sqr-yards '.format(plt_area),trans_type='Transaction Type : {}.'.format(trn_type),plot_addres='Plot Address : {}, Hyderabad.'.format(addre))
    
 
 if __name__ == "__main__":
