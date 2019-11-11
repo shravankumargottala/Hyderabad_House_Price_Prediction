@@ -21,7 +21,7 @@ def home():
 @app.route('/House',methods=['GET','POST'])
 def house():
     if request.method == 'POST':
-        df = pd.read_csv("https://github.com/shravankumargottala/Hyderabad_House_Price_Prediction/blob/master/Hyd_House_Vill_Price.csv/Hyd_House_Vill_Price.csv")
+        df = pd.read_csv("https://github.com/shravankumargottala/Hyderabad_House_Price_Prediction/blob/master/Hyd_House_Vill_Price.csv")
         
         Furn_Uniq = df['Furnished_status'].unique()
         for j in range(len(Furn_Uniq)):
