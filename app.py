@@ -2,10 +2,9 @@ import numpy as np
 from flask import Flask, request, jsonify, render_template
 import pickle
 import pandas as pd
-import pymsgbox
 
 app = Flask(__name__)
-alert = ""
+
 fac_dict = {}
 status_dict = {}
 Furn_stat_dict = {}
@@ -107,10 +106,6 @@ def flat_predict():
         furn_status = request.form['furn_stat']
         flat_fac = request.form['flat_facing']
         flat_addres = request.form['addr']
-        if int(car_area) > int(sup_area) :
-            print("entered")
-            pymsgbox.alert('Carper area is greater than the Super area', 'Title')
-            #request.form['flr_no'] = ""
         int_features =[no_of_bed,no_of_bath,no_of_bolc,no_of_pooja,sup_area,car_area,flr_nos,total_flr_nos,Furn_stat_dict[furn_status],fac_dict[flat_fac],addr_dict[flat_addres]]
         final_features = [np.array(int_features)]
         prediction = model.predict(final_features)
