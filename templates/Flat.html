@@ -12,6 +12,35 @@
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="desi.css">
 
+<script>
+function checkform() {
+    if( document.flat_form.car_ar.value > document.flat_form.sup_ar.value) {
+        alert("Plese enter the carpet value is less than are equal to super area");
+		$('#carpetid').val('');
+        return false;
+    }
+	if( document.flat_form.balcid.value > document.flat_form.bedid.value) {
+        alert("Plese enter the no of balconies is less than are equal to no of bed rooms");
+		$('#balcid').val('');
+        return false;
+    }
+	if( document.flat_form.poojaid.value > document.flat_form.bedid.value) {
+        alert("Plese enter the no of pooja rooms is less than are equal to no of bed rooms");
+		$('#poojaid').val('');
+        return false;
+    }
+	if( document.flat_form.bathid.value > document.flat_form.bedid.value) {
+        alert("Plese enter the no of bath rooms is less than are equal to no of bed rooms");
+		$('#bathid').val('');
+        return false;
+    }
+	if( document.flat_form.flrid.value > document.flat_form.tflrid.value) {
+        alert("Plese enter the no of floors is less than the total floors");
+		$('#flrid').val('');
+        return false;
+    }
+}
+</script>
 </head>
 
 <body>
@@ -21,24 +50,24 @@
         <h1>Predict Hyderabad Flat/Apartment Price Analysis</h1><br>
       
      <!-- Main Input For Receiving Query to our ML -->
-    <form action="{{ url_for('flat_predict')}}"method="post">
+    <form name = "flat_form" action="{{ url_for('flat_predict')}}"method="post">
       
       
       <div class="form-group">
         <lable>No of Bedrooms :</lable>
-        <input type="text" id ="ex2" name="no_bed" placeholder="eg: 1,2,3" required="required" />
+        <input type="text" id ="bedid" name="no_bed" placeholder="eg: 1,2,3" required="required" />
       </div>
 	  <div class="form-group">
         <lable>No of Bathrooms :</lable>
-        <input type="text" id ="ex2" name="no_bath" placeholder="eg: 0,1,2" required="required" />
+        <input type="text" id ="bathid" name="no_bath" placeholder="eg: 0,1,2" required="required" />
       </div>
 	  <div class="form-group">
         <lable>No of Balconies :</lable>
-        <input type="text" id ="ex2" name="no_balc" placeholder="eg: 0,1,2" required="required" />
+        <input type="text" id ="balcid" name="no_balc" placeholder="eg: 0,1,2" required="required" />
       </div>
 	  <div class="form-group">
         <lable>No of Poojarooms :</lable>
-        <input type="text" id ="ex2" name="no_pooja" placeholder="eg: 0,1,2" required="required" />
+        <input type="text" id ="poojaid" name="no_pooja" placeholder="eg: 0,1,2" required="required" />
       </div>
 	  <div class="form-group">
         <lable>Super Area( in sqrft) :</lable>
@@ -46,15 +75,15 @@
       </div>
 	  <div class="form-group">
         <lable>Carpet Area( in sqrft) :</lable>
-        <input type="text" id ="ex2" name="car_ar" placeholder="eg: 800,1000" required="required" />
+        <input type="text" id ="carpetid" name="car_ar" placeholder="eg: 800,1000" required="required" />
       </div>
 	  <div class="form-group">
         <lable>Floor Number :</lable>
-        <input type="text" id ="ex2" name="flr_no" placeholder="eg: 0,1, 2" required="required" />
+        <input type="text" id ="flrid" name="flr_no" placeholder="eg: 0,1, 2" required="required" />
       </div>
 	  <div class="form-group">
         <lable>Total Floors :</lable>
-        <input type="text" id ="ex2" name="total_flr_no" placeholder="eg: 0,1, 2" required="required" />
+        <input type="text" id ="tflrid" name="total_flr_no" placeholder="eg: 0,1, 2" required="required" />
       </div>
 	  <div class="form-group">
         <lable>Furnishing Status :</lable>
@@ -81,7 +110,7 @@
          </select>
       </div>
         
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<button type="submit" class="btn btn-primary">Predict</button>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<button type="submit" class="btn btn-primary" value="submit" onClick="checkform();">Predict</button>
 		
     </form>
 	<br>

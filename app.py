@@ -2,9 +2,10 @@ import numpy as np
 from flask import Flask, request, jsonify, render_template
 import pickle
 import pandas as pd
+import pymsgbox
 
 app = Flask(__name__)
-
+alert = ""
 fac_dict = {}
 status_dict = {}
 Furn_stat_dict = {}
@@ -106,6 +107,10 @@ def flat_predict():
         furn_status = request.form['furn_stat']
         flat_fac = request.form['flat_facing']
         flat_addres = request.form['addr']
+        if int(car_area) > int(sup_area) :
+            print("entered")
+            pymsgbox.alert('Carper area is greater than the Super area', 'Title')
+            #request.form['flr_no'] = ""
         int_features =[no_of_bed,no_of_bath,no_of_bolc,no_of_pooja,sup_area,car_area,flr_nos,total_flr_nos,Furn_stat_dict[furn_status],fac_dict[flat_fac],addr_dict[flat_addres]]
         final_features = [np.array(int_features)]
         prediction = model.predict(final_features)
@@ -146,21 +151,17 @@ def plot_predict():
     model = pickle.load(open('Plot_model.pkl', 'rb'))
     if request.method == 'POST':
         prj_name = request.form['prj_name']
-        print("proj_name is ",prj_name)
         plt_area = request.form.get('plt_area')
-        print("plot_area is ",plt_area)
         trn_type = request.form['trn_type']
-        print("trans_type is ",trn_type)
         addre = request.form['addre']
         int_features =[Project[prj_name],plt_area,Transaction[trn_type],Addr[addre]]
         final_features = [np.array(int_features)]
-        print("final_features is ",final_features)
         prediction = model.predict(final_features)
 
         output = round(np.expm1(prediction[0]),2)
 	   
 	   
-        return render_template('plot_result.html', prediction_text='{} Plot Price for the below Specifications will be ₹ {}/- Lacs'.format(addre,output),proj_name='Society Name : {}.'.format(prj_name),plot_area='Plot Area : {} sqr-yards '.format(plt_area),trans_type='Transaction Type : {}.'.format(trn_type),plot_addres='Plot Address : {}, Hyderabad.'.format(addre))
+        return render_template('plot_result.html', prediction_text='{} Plot Price for the below Specifications will be ₹ {}/- Lacs'.format(addre,output),proj_name='Project Name : {}.'.format(prj_name),plot_area='Plot Area : {} sqr-yards '.format(plt_area),trans_type='Transaction Type : {}.'.format(trn_type),plot_addres='Plot Address : {}, Hyderabad.'.format(addre))
    
 
 if __name__ == "__main__":
