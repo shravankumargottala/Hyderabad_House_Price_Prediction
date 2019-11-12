@@ -104,8 +104,10 @@ def flat_predict():
         flr_nos = request.form['flr_no']
         total_flr_nos = request.form['total_flr_no']
         furn_status = request.form['furn_stat']
+        print("furnishing status is",Furn_stat_dict[furn_status])
         flat_fac = request.form['flat_facing']
         flat_addres = request.form['addr']
+        
         int_features =[no_of_bed,no_of_bath,no_of_bolc,no_of_pooja,sup_area,car_area,flr_nos,total_flr_nos,Furn_stat_dict[furn_status],fac_dict[flat_fac],addr_dict[flat_addres]]
         final_features = [np.array(int_features)]
         prediction = model.predict(final_features)
