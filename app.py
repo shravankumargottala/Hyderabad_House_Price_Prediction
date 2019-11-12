@@ -104,7 +104,6 @@ def flat_predict():
         flr_nos = request.form['flr_no']
         total_flr_nos = request.form['total_flr_no']
         furn_status = request.form['furn_stat']
-        print("furnishing status is",Furn_stat_dict[furn_status])
         flat_fac = request.form['flat_facing']
         flat_addres = request.form['addr']
         
@@ -115,7 +114,7 @@ def flat_predict():
         output = round(np.expm1(prediction[0]),2)
 	   
 	   
-        return render_template('result.html', prediction_text='{} Flat Price for the below Specifications will be ₹ {}/- Lacs'.format(flat_addres,output),no_of_bed_rooms='Flat type : {} BHK '.format(no_of_bed),sup_area='Super Area : {} sqft'.format(sup_area),car_area='Carpet Area : {} sqft'.format(car_area),flat_fac='Flat Facing : {}'.format(flat_fac),flat_addres='Flat Address : {}, Hyderabad'.format(flat_addres))
+        return render_template('result.html', prediction_text='{} Flat Price for the below Specifications will be ₹ {}/- Lacs'.format(flat_addres,output),no_of_bed_rooms='Flat type : {} BHK '.format(no_of_bed),sup_area='Super Area : {} sqft'.format(sup_area),car_area='Carpet Area : {} sqft'.format(car_area),flat_fac='Flat Facing : {}'.format(flat_fac),furn_status='Furnishing status: {}.'.format(furn_status),flat_addres='Flat Address : {}, Hyderabad'.format(flat_addres))
    
 @app.route('/house_predict',methods=['POST'])
 def house_predict():
@@ -141,7 +140,7 @@ def house_predict():
         output = round(np.expm1(prediction[0]),2)
 	   
 	   
-        return render_template('house_result.html', prediction_text='{} House Price for the below Specifications will be ₹ {}/- Lacs'.format(house_addres,output),no_of_bed_rooms='Flat type : {} BHK '.format(no_of_bed),sup_area='Super Area : {} sqft'.format(sup_area),car_area='Carpet Area : {} sqft'.format(car_area),house_facing='House Facing : {}'.format(house_facing),house_addres='House Address : {}, Hyderabad'.format(house_addres))
+        return render_template('house_result.html', prediction_text='{} House Price for the below Specifications will be ₹ {}/- Lacs'.format(house_addres,output),no_of_bed_rooms='Flat type : {} BHK '.format(no_of_bed),sup_area='Super Area : {} sqft'.format(sup_area),car_area='Carpet Area : {} sqft'.format(car_area),house_facing='House Facing : {}'.format(house_facing),furn_status='Furnishing status: {}.'.format(furn_status),house_addres='House Address : {}, Hyderabad'.format(house_addres))
    
 @app.route('/plot_predict',methods=['POST'])
 def plot_predict():
