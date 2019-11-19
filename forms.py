@@ -136,6 +136,6 @@ class FlatPrice(FlaskForm):
     Furn_status = SelectField('Furnishing Status:', choices=tuple(furn_main_list))
     Fac_status = SelectField('Facing:', choices=tuple(fac_main_list))
     Addrss = SelectField('Address:', choices=tuple(addr_main_list))
-    submit = SubmitField('Predict', render_kw={"onclick": "checkform()"},default={})
+    submit = SubmitField('Predict', render_kw={"onclick": "checkform()"},default=0)
     
     
