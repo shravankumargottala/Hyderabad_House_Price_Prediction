@@ -65,7 +65,7 @@ def house_predict():
     form = HousePrice()
     model = pickle.load(open('House_Vill_model.pkl', 'rb'))
 
-    df = pd.read_csv("https://raw.githubusercontent.com/shravankumargottala/Hyderabad_House_Price_Prediction/master/Hyd_Flat_Apartment_House_Price.csv")
+    df = pd.read_csv("https://raw.githubusercontent.com/shravankumargottala/Hyderabad_House_Price_Prediction/master/Hyd_House_Vill_Price.csv")
     
     Furn_Uniq = df['Furnished_status'].unique()
     for j in range(len(Furn_Uniq)):
