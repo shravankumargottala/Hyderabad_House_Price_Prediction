@@ -124,7 +124,7 @@ def flat_predict():
     print("flat_addr_dict is ",flat_addr_dict)
     if form.validate_on_submit():
 
-        if request.method == 'POST':
+        if request.method == 'POST' and form.validate():
             no_of_bed = request.form['No_of_Bedrooms']
             no_of_bath = request.form['No_of_Bathrooms']
             no_of_bolc = request.form['No_of_Balconies']
