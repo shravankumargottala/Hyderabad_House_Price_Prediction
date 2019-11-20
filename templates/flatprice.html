@@ -142,6 +142,8 @@
     </div>
     <script>
     function checkform() {
+	alert("ENtered")
+	alert(document.house_form.No_of_Bathrooms.value)
     	if( parseInt(document.house_form.Supr_Area.value) < parseInt(document.house_form.Carp_Area.value) ) {
             alert("Plese enter the carpet value is less than are equal to super area");
             document.house_form.Carp_Area.value = ""
