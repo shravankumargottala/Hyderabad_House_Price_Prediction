@@ -108,7 +108,6 @@ def flat_predict():
     model = pickle.load(open('hyd_flat_model.pkl', 'rb'))
 
     df_flat = pd.read_csv("https://raw.githubusercontent.com/shravankumargottala/Hyderabad_House_Price_Prediction/master/Hyd_Flat_Apartment_House_Price.csv")
-    print(df_flat.shape)
     Flat_Furn_Uniq = df_flat['Furnished_status'].unique()
     for j in range(len(Flat_Furn_Uniq)):
         flat_furn_stat_dict[Flat_Furn_Uniq[j]] = j
@@ -121,7 +120,6 @@ def flat_predict():
     Flat_addr_Uniq = df_flat['Address'].unique()
     for l in range(len(Flat_addr_Uniq)):
         flat_addr_dict[Flat_addr_Uniq[l]] = l
-    print("flat_addr_dict is ",flat_addr_dict)
   
     if request.method == 'POST':
         no_of_bed = request.form['No_of_Bedrooms']
@@ -131,17 +129,11 @@ def flat_predict():
         sup_area = request.form['Supr_Area']
         car_area = request.form['Carp_Area']
         flr_no = request.form['Floor_No']
-        print("floor number is ",flr_no)
         total_flrs = request.form['Total_Floors']
-        print("total_flrs number is ",total_flrs)
         furn_status = request.form['Furn_status']
-        print("furn_status number is ",furn_status)
         house_facing = request.form['Fac_status']
-        print("house_facing is ",house_facing)
         house_addres = request.form['Addrss']
-        print("house_addres is ",house_addres,flat_addr_dict[house_addres])
         int_features =[no_of_bed,no_of_bath,no_of_bolc,no_of_pooja,sup_area,car_area,flr_no,total_flrs,flat_furn_stat_dict[furn_status],flat_fac_dict[house_facing],flat_addr_dict[house_addres]]
-        print("int_features is ",int_features)
         final_features = [np.array(int_features)]
         prediction = model.predict(final_features)
         output = round(np.expm1(prediction[0]),2)
