@@ -80,7 +80,7 @@ class HousePrice(FlaskForm):
     Furn_status = SelectField('Furnishing Status:', choices=tuple(furn_main_list))
     Fac_status = SelectField('Facing:', choices=tuple(fac_main_list))
     Addrss = SelectField('Address:', choices=tuple(addr_main_list))
-    submit = SubmitField('Predict', render_kw={"onclick": "checkform()"})
+    submit = SubmitField('Predict', render_kw={"onclick": "checkform()"},default = {'No_of_Bedrooms':1,'No_of_Bathrooms':1,'No_of_Balconies':1,'No_of_Poojarooms':1,'Supr_Area':900,'Carp_Area':800,'Floor_No':2,'Total_Floors':3,'Furn_status':0,'Fac_status':0,'Addrss':188})
     
 
 class FlatPrice(FlaskForm):
