@@ -1,7 +1,7 @@
 import pandas as pd
 from flask_wtf import FlaskForm
 from wtformsparsleyjs import StringField, PasswordField, BooleanField, IntegerField, SelectField
-from wtforms.validators import DataRequired, Length, Email, EqualTo, InputRequired, ValidationError
+from wtforms.validators import DataRequired, Length, Email, EqualTo, InputRequired, ValidationError, Required
 from wtforms import SubmitField, TextField
 
 house_furn_stat_dict = {}
@@ -71,12 +71,12 @@ class HousePrice(FlaskForm):
     df['Furnished_status'] = df['Furnished_status'].map(house_furn_stat_dict)
     df['Facing'] = df['Facing'].map(house_fac_dict)
     df['Address'] = df['Address'].map(house_addr_dict)
-    No_of_Bedrooms = IntegerField('No of Bedrooms:',validators=[InputRequired(), Length(min=0,max=2)])
-    No_of_Bathrooms = IntegerField('No of Bathrooms:', validators=[InputRequired(), Length(min=0,max=2)])
-    No_of_Balconies = IntegerField('No of Balconies:', validators=[DataRequired(), Length(min=0,max=1)])
-    No_of_Poojarooms = IntegerField('No of Poojarooms:', validators=[DataRequired(), Length(min=0,max=1)])
-    Supr_Area = IntegerField('Super Area:', validators=[DataRequired(), Length(min=0,max=10)])
-    Carp_Area = IntegerField('Carpet Area:', validators=[DataRequired(), Length(min=0,max=10)])
+    No_of_Bedrooms = IntegerField('No of Bedrooms:',validators=[Required(), Length(min=0,max=2)])
+    No_of_Bathrooms = IntegerField('No of Bathrooms:', validators=[Required(), Length(min=0,max=2)])
+    No_of_Balconies = IntegerField('No of Balconies:', validators=[Required(), Length(min=0,max=1)])
+    No_of_Poojarooms = IntegerField('No of Poojarooms:', validators=[Required(), Length(min=0,max=1)])
+    Supr_Area = IntegerField('Super Area:', validators=[Required(), Length(min=0,max=10)])
+    Carp_Area = IntegerField('Carpet Area:', validators=[Required(), Length(min=0,max=10)])
     Furn_status = SelectField('Furnishing Status:', choices=tuple(furn_main_list))
     Fac_status = SelectField('Facing:', choices=tuple(fac_main_list))
     Addrss = SelectField('Address:', choices=tuple(addr_main_list))
