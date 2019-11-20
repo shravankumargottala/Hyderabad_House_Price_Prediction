@@ -1,7 +1,8 @@
 import pandas as pd
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, BooleanField, IntegerField, SelectField, TextField
+from wtformsparsleyjs import StringField, PasswordField, BooleanField, IntegerField, SelectField
 from wtforms.validators import DataRequired, Length, Email, EqualTo, InputRequired, ValidationError
+from wtforms import SubmitField, TextField
 
 house_furn_stat_dict = {}
 house_fac_dict = {}
@@ -125,14 +126,14 @@ class FlatPrice(FlaskForm):
     df_flat['Furnished_status'] = df_flat['Furnished_status'].map(house_furn_stat_dict)
     df_flat['Facing'] = df_flat['Facing'].map(house_fac_dict)
     df_flat['Address'] = df_flat['Address'].map(house_addr_dict)
-    No_of_Bedrooms = IntegerField('No of Bedrooms:',validators=[InputRequired(), Length(min=0,max=2)])
-    No_of_Bathrooms = IntegerField('No of Bathrooms:', validators=[InputRequired(), Length(min=0,max=2)])
-    No_of_Balconies = IntegerField('No of Balconies:', validators=[DataRequired(), Length(min=0,max=1)])
-    No_of_Poojarooms = IntegerField('No of Poojarooms:', validators=[DataRequired(), Length(min=0,max=1)])
-    Supr_Area = IntegerField('Super Area:', validators=[DataRequired(), Length(min=0,max=10)])
-    Carp_Area = IntegerField('Carpet Area:', validators=[DataRequired(), Length(min=0,max=10)])
-    Floor_No = IntegerField('Floor No:', validators=[DataRequired(), Length(min=0,max=1)])
-    Total_Floors = IntegerField('Total Floors:', validators=[DataRequired(), Length(min=0,max=1)])
+    No_of_Bedrooms = IntegerField('No of Bedrooms:',validators=[InputRequired()])
+    No_of_Bathrooms = IntegerField('No of Bathrooms:', validators=[InputRequired()])
+    No_of_Balconies = IntegerField('No of Balconies:', validators=[DataRequired()])
+    No_of_Poojarooms = IntegerField('No of Poojarooms:', validators=[DataRequired()])
+    Supr_Area = IntegerField('Super Area:', validators=[DataRequired()])
+    Carp_Area = IntegerField('Carpet Area:', validators=[DataRequired()])
+    Floor_No = IntegerField('Floor No:', validators=[DataRequired()])
+    Total_Floors = IntegerField('Total Floors:', validators=[DataRequired()])
     Furn_status = SelectField('Furnishing Status:', choices=tuple(furn_main_list))
     Fac_status = SelectField('Facing:', choices=tuple(fac_main_list))
     Addrss = SelectField('Address:', choices=tuple(addr_main_list))
