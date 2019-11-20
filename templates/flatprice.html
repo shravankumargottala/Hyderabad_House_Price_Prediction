@@ -131,7 +131,7 @@
                 </div>
             </fieldset>
             <div class="form-group">
-		<button type="submit" class="btn btn-outline-info" value="submit">Predict</button>
+				<button type="submit" class="btn btn-primary" value="submit" onClick="checkform();">Predict</button>
             </div>
         </form>
     </div>
@@ -141,32 +141,30 @@
         </small>
     </div>
 {% block head %}
-<script>
-	function checkform() {
-	alert("ENtered")
-	alert(document.house_form.No_of_Bathrooms.value)
-	if( parseInt(document.house_form.Supr_Area.value) < parseInt(document.house_form.Carp_Area.value) ) {
-	    alert("Plese enter the carpet value is less than are equal to super area");
-	    document.house_form.Carp_Area.value = ""
-	    return false;
-	}
-	if( document.house_form.No_of_Bathrooms.value > document.house_form.No_of_Bedrooms.value) {
-	    alert("Plese enter the no of bath rooms is less than are equal to no of bed rooms");
-	    document.house_form.No_of_Bathrooms.value = ""
-	    return false;
-	}
-	if( document.house_form.No_of_Balconies.value > document.house_form.No_of_Bedrooms.value) {
-	    alert("Plese enter the no of balconies is less than are equal to no of bed rooms");
-	    document.house_form.No_of_Balconies.value = ""
-	    return false;
-	}
-	if( document.house_form.No_of_Poojarooms.value > document.house_form.No_of_Bedrooms.value) {
-	    alert("Plese enter the no of pooja rooms is less than are equal to no of bed rooms");
-	    document.house_form.No_of_Poojarooms.value = ""
-	    return false;
-	}
-
-	}
-</script>
+    <script>
+    function checkform() {
+    	if( parseInt(document.house_form.Supr_Area.value) < parseInt(document.house_form.Carp_Area.value) ) {
+            alert("Plese enter the carpet value is less than are equal to super area");
+            document.house_form.Carp_Area.value = ""
+            return false;
+        }
+        if( document.house_form.No_of_Bathrooms.value > document.house_form.No_of_Bedrooms.value) {
+            alert("Plese enter the no of bath rooms is less than are equal to no of bed rooms");
+            document.house_form.No_of_Bathrooms.value = ""
+            return false;
+        }
+        if( document.house_form.No_of_Balconies.value > document.house_form.No_of_Bedrooms.value) {
+            alert("Plese enter the no of balconies is less than are equal to no of bed rooms");
+            document.house_form.No_of_Balconies.value = ""
+            return false;
+        }
+        if( document.house_form.No_of_Poojarooms.value > document.house_form.No_of_Bedrooms.value) {
+            alert("Plese enter the no of pooja rooms is less than are equal to no of bed rooms");
+            document.house_form.No_of_Poojarooms.value = ""
+            return false;
+        }
+        
+    }
+    </script>
 {% endblock head %}
 {% endblock content %}
