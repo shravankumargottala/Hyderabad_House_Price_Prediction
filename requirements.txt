@@ -21,3 +21,4 @@ Flask-WTF==0.14.2
 pycparser==2.18
 six==1.11.0
 WTForms==2.1
+WTForms-ParsleyJS==2.0.1
