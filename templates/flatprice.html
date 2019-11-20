@@ -140,9 +140,7 @@
             Already Have An Account? <a class="ml-2" href="{{ url_for('login') }}">Sign In</a>
         </small>
     </div>
-    
-{% endblock content %}
-{% block script %}
+{% block head %}
 <script>
 	function checkform() {
 	alert("ENtered")
@@ -170,4 +168,5 @@
 
 	}
 </script>
-{% endblock script %}
+{% endblock head %}
+{% endblock content %}
