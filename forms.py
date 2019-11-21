@@ -71,7 +71,7 @@ class HousePrice(FlaskForm):
     df['Furnished_status'] = df['Furnished_status'].map(house_furn_stat_dict)
     df['Facing'] = df['Facing'].map(house_fac_dict)
     df['Address'] = df['Address'].map(house_addr_dict)
-    No_of_Bedrooms = IntegerField('No of Bedrooms:',validators=[Required(), Length(min=0,max=2)])
+    No_of_Bedrooms = IntegerField('No of Bedrooms:',validators=[InputRequired(), Length(min=0,max=2)])
     No_of_Bathrooms = IntegerField('No of Bathrooms:', validators=[Required(), Length(min=0,max=2)])
     No_of_Balconies = IntegerField('No of Balconies:', validators=[Required(), Length(min=0,max=1)])
     No_of_Poojarooms = IntegerField('No of Poojarooms:', validators=[Required(), Length(min=0,max=1)])
@@ -80,7 +80,7 @@ class HousePrice(FlaskForm):
     Furn_status = SelectField('Furnishing Status:', choices=tuple(furn_main_list))
     Fac_status = SelectField('Facing:', choices=tuple(fac_main_list))
     Addrss = SelectField('Address:', choices=tuple(addr_main_list))
-    submit = SubmitField('Predict', render_kw={"onclick": "checkform()"})
+    submit = SubmitField('Predict')
     
 
 class FlatPrice(FlaskForm):
