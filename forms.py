@@ -71,7 +71,7 @@ class HousePrice(FlaskForm):
     df['Furnished_status'] = df['Furnished_status'].map(house_furn_stat_dict)
     df['Facing'] = df['Facing'].map(house_fac_dict)
     df['Address'] = df['Address'].map(house_addr_dict)
-    No_of_Bedrooms = IntegerField('No of Bedrooms:',validators=[InputRequired(), Length(min=0,max=2)])
+    No_of_Bedrooms = IntegerField('No of Bedrooms:',validators=[InputRequired()])
     No_of_Bathrooms = IntegerField('No of Bathrooms:', validators=[Required(), Length(min=0,max=2)])
     No_of_Balconies = IntegerField('No of Balconies:', validators=[Required(), Length(min=0,max=1)])
     No_of_Poojarooms = IntegerField('No of Poojarooms:', validators=[Required(), Length(min=0,max=1)])
