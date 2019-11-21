@@ -81,22 +81,25 @@ def house_predict():
         house_addr_dict[addr_Uniq[l]] = l
   
     if request.method == 'POST':
-        no_of_bed = request.form['No_of_Bedrooms']
-        no_of_bath = request.form['No_of_Bathrooms']
-        no_of_bolc = request.form['No_of_Balconies']
-        no_of_pooja = request.form['No_of_Poojarooms']
-        sup_area = request.form['Supr_Area']
-        car_area = request.form['Carp_Area']
-        furn_status = request.form['Furn_status']
-        house_facing = request.form['Fac_status']
-        house_addres = request.form['Addrss']
-        int_features =[no_of_bed,no_of_bath,no_of_bolc,no_of_pooja,sup_area,car_area,house_furn_stat_dict[furn_status],house_fac_dict[house_facing],house_addr_dict[house_addres]]
-        final_features = [np.array(int_features)]
-        prediction = model.predict(final_features)
-        output = round(np.expm1(prediction[0]),2)
+        if form.validate() == False :
+            return render_template('houseprice.html', form=form)
+        else:
+            no_of_bed = request.form['No_of_Bedrooms']
+            no_of_bath = request.form['No_of_Bathrooms']
+            no_of_bolc = request.form['No_of_Balconies']
+            no_of_pooja = request.form['No_of_Poojarooms']
+            sup_area = request.form['Supr_Area']
+            car_area = request.form['Carp_Area']
+            furn_status = request.form['Furn_status']
+            house_facing = request.form['Fac_status']
+            house_addres = request.form['Addrss']
+            int_features =[no_of_bed,no_of_bath,no_of_bolc,no_of_pooja,sup_area,car_area,house_furn_stat_dict[furn_status],house_fac_dict[house_facing],house_addr_dict[house_addres]]
+            final_features = [np.array(int_features)]
+            prediction = model.predict(final_features)
+            output = round(np.expm1(prediction[0]),2)
 
-        return render_template('house_result.html', prediction_text='{} House Price for the below Specifications will be ₹ {}/- Lacs'.format(house_addres,output),no_of_bed_rooms='Flat type : {} BHK '.format(no_of_bed),sup_area='Super Area : {} sqft'.format(sup_area),car_area='Carpet Area : {} sqft'.format(car_area),house_facing='House Facing : {}'.format(house_facing),furn_status='Furnishing status: {}.'.format(furn_status),house_addres='House Address : {}, Hyderabad'.format(house_addres))
-    
+            return render_template('house_result.html', prediction_text='{} House Price for the below Specifications will be ₹ {}/- Lacs'.format(house_addres,output),no_of_bed_rooms='Flat type : {} BHK '.format(no_of_bed),sup_area='Super Area : {} sqft'.format(sup_area),car_area='Carpet Area : {} sqft'.format(car_area),house_facing='House Facing : {}'.format(house_facing),furn_status='Furnishing status: {}.'.format(furn_status),house_addres='House Address : {}, Hyderabad'.format(house_addres))
+
 @app.route("/flatprice", methods=['GET', 'POST'])
 def flatprice():
     form = FlatPrice()
