@@ -149,7 +149,7 @@ def flat_predict():
             prediction = model.predict(final_features)
             output = round(np.expm1(prediction[0]),2)
 
-            return render_template('flat_result.html', prediction_text='{} Flat Price for the below Specifications will be ₹ {}/- Lacs'.format(house_addres,output),no_of_bed_rooms='Flat type : {} BHK '.format(no_of_bed),sup_area='Super Area : {} sqft'.format(sup_area),car_area='Carpet Area : {} sqft'.format(car_area),house_facing='House Facing : {}'.format(house_facing),furn_status='Furnishing status: {}.'.format(furn_status),house_addres='House Address : {}, Hyderabad'.format(house_addres))
+            return render_template('flat_result.html', prediction_text='{} Flat Price for the below Specifications will be ₹ {}/- Lacs'.format(house_addres,output),no_of_bed_rooms='Flat type : {} BHK '.format(no_of_bed),sup_area='Super Area : {} sqft'.format(sup_area),car_area='Carpet Area : {} sqft'.format(car_area),house_facing='Flat Facing : {}'.format(house_facing),furn_status='Furnishing status: {}.'.format(furn_status),house_addres='Flat Address : {}, Hyderabad'.format(house_addres))
         
         
 if __name__ == '__main__':
