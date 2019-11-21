@@ -128,9 +128,7 @@ def flat_predict():
   
     if request.method == 'POST':
         if form.validate() == False :
-            flash("All fields are manadatory")
             return render_template('flatprice.html', form=form)
-            print("entered into not validate section")
         else:
 
             no_of_bed = request.form['No_of_Bedrooms']
