@@ -139,4 +139,52 @@ class FlatPrice(FlaskForm):
     Addrss = SelectField('Address:', choices=tuple(addr_main_list))
     submit = SubmitField('Predict', render_kw={"onclick": "checkform()"})
     
+Plot_Project_Dict = {}
+Plot_Transaction_Dict = {}
+Plt_Addr_Dict = {}
+class PlotPrice(FlaskForm):
+    df = pd.read_csv("https://raw.githubusercontent.com/shravankumargottala/Hyderabad_House_Price_Prediction/master/Hyd_Plot_Price.csv")
+        
+    Plot_Project_Unq = df.Project_Name.unique()
+    for i in range(len(Plot_Project_Unq)):
+        Plot_Project_Dict[Plot_Project_Unq[i]] = i
+        
+    soci_main_list = []
+    for i in range(len(Plot_Project_Unq)):
+        soci_sub_list = []
+        for j in range(2):
+            soci_sub_list.append(Plot_Project_Unq[i])
+        soci_main_list.append(tuple(soci_sub_list))
+
+    Plot_Transaction_Unq = df.Transaction_Type.unique()
+    for i in range(len(Plot_Transaction_Unq)):
+        Plot_Transaction_Dict[Plot_Transaction_Unq[i]] = i
     
+    trans_main_list = []
+    for i in range(len(Plot_Transaction_Unq)):
+        trans_sub_list = []
+        for j in range(2):
+            trans_sub_list.append(Plot_Transaction_Unq[i])
+        trans_main_list.append(tuple(trans_sub_list))
+
+
+    Plot_Address_Unq = df.Address.unique()
+    for i in range(len(Plot_Address_Unq)):
+        Plt_Addr_Dict[Plot_Address_Unq[i]] = i
+        
+    addr_main_list = []
+    for i in range(len(Plot_Address_Unq)):
+        addr_sub_list = []
+        for j in range(2):
+            addr_sub_list.append(Plot_Address_Unq[i])
+        addr_main_list.append(tuple(addr_sub_list))
+        
+    Soci_Name =  SelectField('Society Name:', choices=tuple(soci_main_list)) 
+    Plt_Area = IntegerField('Plot Area:', validators=[InputRequired()])
+    Trans_Type = SelectField('Transaction Type:', choices=tuple(trans_main_list))
+    Addrss = SelectField('Address:', choices=tuple(addr_main_list))
+    submit = SubmitField('Predict')   
+        
+        
+        
+        

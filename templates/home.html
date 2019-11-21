@@ -2,10 +2,14 @@
 {% block content %}
 	<article class="media content-section">
 	  <div class="media-body">
-		<h2><a class="article-title" href="{{ url_for('houseprice') }}">House Price Prediction</a></h2>
+		<h3><a class="article-title" href="{{ url_for('houseprice') }}">House Price Prediction</a></h3>
 	</article>
 	<article class="media content-section">
 	  <div class="media-body">
-		<h2><a class="article-title" href="{{ url_for('flatprice') }}">Flat Price Prediction</a></h2>
+		<h3><a class="article-title" href="{{ url_for('flatprice') }}">Flat Price Prediction</a></h3>
+	</article>
+	<article class="media content-section">
+	  <div class="media-body">
+		<h3><a class="article-title" href="{{ url_for('plotprice') }}">Plot Price Prediction</a></h3>
 	</article>
 {% endblock content %}
