@@ -162,13 +162,13 @@
             return false;
         }
         if( parseInt(document.house_form.Carp_Area.value) > parseInt(document.house_form.Supr_Area.value) ) {
-            alert("Plese enter the carpet value is less than are equal to super area");
+            alert("Plese enter the carpet area value is less than to super area");
             document.house_form.Carp_Area.value = ""
             return false;
         }
-        if( parseInt(document.house_form.Floor_No.value) > parseInt(document.house_form.Total_Floors.value) ) {
-            alert("Plese enter the carpet value is less than are equal to super area");
-            document.house_form.Carp_Area.value = ""
+        if( (document.house_form.Floor_No.value) > (document.house_form.Total_Floors.value) ) {
+            alert("Plese enter the Floor number is less than are equal to Total Floors");
+            document.house_form.Floor_No.value = ""
             return false;
         }
         
