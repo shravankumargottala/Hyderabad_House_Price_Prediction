@@ -1,10 +1,10 @@
 {% extends "layout.html" %}
 {% block content %}
     <div class="content-section">
+        <h2 style = "text-align: center;">House Price Prediction Form</h2>
         <form method="POST" name = "house_form" action="{{ url_for('house_predict')}}">
             {{ form.hidden_tag() }}
             <fieldset class="form-group">
-                <legend class="border-bottom mb-4">House Price Prediction</legend>
                 <div class="form-group">
                     {{ form.No_of_Bedrooms.label(class="form-control-label") }}
 
