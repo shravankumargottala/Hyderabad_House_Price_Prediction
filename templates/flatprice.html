@@ -1,6 +1,11 @@
 {% extends "layout.html" %}
 {% block content %}
     <div class="content-section">
+        <h2 style = "text-align: center;">Contact Form</h2>
+        
+          {% for message in form.No_of_Bedrooms.errors %}
+             <div>{{ message }}</div>
+          {% endfor %}
         <form method="POST" name = "house_form" action="{{ url_for('flat_predict')}}">
             {{ form.hidden_tag() }}
             <fieldset class="form-group">
@@ -140,7 +145,6 @@
             Already Have An Account? <a class="ml-2" href="{{ url_for('login') }}">Sign In</a>
         </small>
     </div>
-{% block head %}
     <script>
     function checkform() {
     	if( parseInt(document.house_form.Supr_Area.value) < parseInt(document.house_form.Carp_Area.value) ) {
@@ -166,5 +170,4 @@
         
     }
     </script>
-{% endblock head %}
 {% endblock content %}
