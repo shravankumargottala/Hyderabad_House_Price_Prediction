@@ -40,6 +40,10 @@ def login():
     form = LoginForm()
     return render_template('login.html', title='Login', form=form)
 
+@app.route("/contact")
+def contact():
+    return render_template('contact.html', title='Contact Me')
+
 @app.route("/houseprice", methods=['GET', 'POST'])
 def houseprice():
     form = HousePrice()

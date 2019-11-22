@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 {% block content %}
     <div class="content-section">
-        <h2 style = "text-align: center;">Flat Price Prediction Form</h2>
+        <h3 style = "text-align: center;">Predict Plot Price Analysis</h3>
         <form method="POST" name = "house_form" action="{{ url_for('plot_predict')}}">
             {{ form.hidden_tag() }}
             <fieldset class="form-group">
