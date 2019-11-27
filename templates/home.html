@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+{% block content %}
+	<article class="media content-section">
+	  <div class="media-body">
+		<h4><a class="article-title" href="{{ url_for('houseprice') }}">House Price Prediction</a></h4>
+	</article>
+	<article class="media content-section">
+	  <div class="media-body">
+		<h4><a class="article-title" href="{{ url_for('flatprice') }}">Flat Price Prediction</a></h4>
+	</article>
+	<article class="media content-section">
+	  <div class="media-body">
+		<h4><a class="article-title" href="{{ url_for('plotprice') }}">Plot Price Prediction</a></h4>
+	</article>
+{% endblock content %}

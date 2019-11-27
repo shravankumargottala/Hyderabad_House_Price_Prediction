@@ -1,0 +1,137 @@
+{% extends "layout.html" %}
+{% block content %}
+    <div class="content-section">
+        <h3 style = "text-align: center;">Predict House Price Analysis</h3>
+        <form method="POST" name = "house_form" action="{{ url_for('house_predict')}}">
+            {{ form.hidden_tag() }}
+            <fieldset class="form-group">
+                <div class="form-group">
+                    {{ form.No_of_Bedrooms.label(class="form-control-label") }}
+
+                    {% if form.No_of_Bedrooms.errors %}
+                        {{ form.No_of_Bedrooms(class="form-control form-control-lg is-invalid") }}
+                        <div class="invalid-feedback">
+                            {% for error in form.No_of_Bedrooms.errors %}
+                                <span>{{ error }}</span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        {{ form.No_of_Bedrooms(class="form-control form-control-lg") }}
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    {{ form.No_of_Bathrooms.label(class="form-control-label") }}
+
+                    {% if form.No_of_Bathrooms.errors %}
+                        {{ form.No_of_Bathrooms(class="form-control form-control-lg is-invalid") }}
+                        <div class="invalid-feedback">
+                            {% for error in form.No_of_Bathrooms.errors %}
+                                <span>{{ error }}</span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        {{ form.No_of_Bathrooms(class="form-control form-control-lg") }}
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    {{ form.No_of_Balconies.label(class="form-control-label") }}
+
+                    {% if form.No_of_Balconies.errors %}
+                        {{ form.No_of_Balconies(class="form-control form-control-lg is-invalid") }}
+                        <div class="invalid-feedback">
+                            {% for error in form.No_of_Balconies.errors %}
+                                <span>{{ error }}</span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        {{ form.No_of_Balconies(class="form-control form-control-lg") }}
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    {{ form.No_of_Poojarooms.label(class="form-control-label") }}
+
+                    {% if form.No_of_Poojarooms.errors %}
+                        {{ form.No_of_Poojarooms(class="form-control form-control-lg is-invalid") }}
+                        <div class="invalid-feedback">
+                            {% for error in form.No_of_Poojarooms.errors %}
+                                <span>{{ error }}</span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        {{ form.No_of_Poojarooms(class="form-control form-control-lg") }}
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    {{ form.Supr_Area.label(class="form-control-label") }}
+
+                    {% if form.Supr_Area.errors %}
+                        {{ form.Supr_Area(class="form-control form-control-lg is-invalid") }}
+                        <div class="invalid-feedback">
+                            {% for error in form.Supr_Area.errors %}
+                                <span>{{ error }}</span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        {{ form.Supr_Area(class="form-control form-control-lg") }}
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    {{ form.Carp_Area.label(class="form-control-label") }}
+
+                    {% if form.Carp_Area.errors %}
+                        {{ form.Carp_Area(class="form-control form-control-lg is-invalid") }}
+                        <div class="invalid-feedback">
+                            {% for error in form.Carp_Area.errors %}
+                                <span>{{ error }}</span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        {{ form.Carp_Area(class="form-control form-control-lg") }}
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    {{ form.Furn_status.label }}
+                    {{ form.Furn_status}}
+                </div>
+                <div class="form-group">
+                    {{ form.Fac_status.label }}
+                    {{ form.Fac_status}}
+                </div>
+                <div class="form-group">
+                    {{ form.Addrss.label }}
+                    {{ form.Addrss}}
+                </div>
+            </fieldset>
+            <div class="form-group">
+                {{ form.submit(class="btn btn-outline-info") }}
+            </div>
+        </form>
+    </div>
+    <div class="border-top pt-3">
+        <small class="text-muted">
+            Already Have An Account? <a class="ml-2" href="{{ url_for('login') }}">Sign In</a>
+        </small>
+    </div>
+    <script>
+    function checkform() {
+    	if( parseInt(document.house_form.Supr_Area.value) < parseInt(document.house_form.Carp_Area.value) ) {
+            alert("Plese enter the carpet value is less than are equal to super area");
+            document.house_form.Carp_Area.value = ""
+            return false;
+        }
+        if( document.house_form.No_of_Bathrooms.value > document.house_form.No_of_Bedrooms.value) {
+            alert("Plese enter the no of bath rooms is less than are equal to no of bed rooms");
+            document.house_form.No_of_Bathrooms.value = ""
+        }
+        if( document.house_form.No_of_Balconies.value > document.house_form.No_of_Bedrooms.value) {
+            alert("Plese enter the no of balconies is less than are equal to no of bed rooms");
+            document.house_form.No_of_Balconies.value = ""
+        }
+        if( document.house_form.No_of_Poojarooms.value > document.house_form.No_of_Bedrooms.value) {
+            alert("Plese enter the no of pooja rooms is less than are equal to no of bed rooms");
+            document.house_form.No_of_Poojarooms.value = ""
+            return false;
+        }
+    }
+    </script>
+{% endblock content %}
