@@ -1,0 +1,3185 @@
+"""
+' Program Name: FCAT.py
+' Date Created  : 3 Aug 2020
+' Purpose       : FCAT outer script to read ICRF form & call the checks.
+' Author        : CA Offshore Team
+' Example Usage : FCAT.py <Icrfformname> <techleadid>
+' Parameters    : 
+"""
+
+import datetime as dt,socket
+import distutils.spawn
+import sys, os, getpass, shutil, csv, time, random
+from subprocess import Popen, PIPE
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+CSVFolder, CSV_ObjListFile, All_Servers, Team_Lead_Id, Form_WO_Number = '','','','',''
+Target_Repository,Wo_Str,Unique_Identifier_Info,User_Id,Metrics_Data_File = '','','','',''
+mail_id,Tmp_Str,Input_Str,Final_Tmp_Str,CAT_PS_File,TD_IP_Str,IMP_Date = '','','','','','',''
+PathArray,ObjArray,ParmArray,Source_Ser_Arr,Tgt_pathArray,ObjFolderArr,newlog_content = [],[],[],[],[],[],[]
+#PathArray(100000),ObjArray(100000),ParmArray(100000),Tgt_pathArray(100000),ICRF_Content(100000),ICRF_NAME_Temp,PVID,IMP_Date,WO_Number,Target_Server,TD_SERVER,Barometer_Id,Bamboo_Application_Name,Miration_Type,Target_Environment,ObjFolderArr(10000),Source_Ser_Arr(1000)
+Barometer_Id = ""
+Bamboo_Application_Name = ""
+Fail_obj = ""
+try:
+    '''----------------------------------------------------------------------------------------------
+    ' Procedure to track not processed rows
+    '----------------------------------------------------------------------------------------------'''
+    def Track_Not_processed(CSV_Line_No,CSV_FLAG,Not_processed):
+        if CSV_FLAG == False :
+            Not_processed = Not_processed + ICRF_NAME_Temp+ ".csv:Row#"+str(CSV_Line_No)
+            CSV_FLAG = True
+        else:
+            Not_processed = Not_processed + "," + str(CSV_Line_No)
+        return CSV_Line_No,CSV_FLAG,Not_processed
+    
+    '''------------------------------------------------------------------------------------------------------
+    ' Prepare the timestamp string YYMMDDHHMISS to append to log file name.
+    '------------------------------------------------------------------------------------------------------'''
+    def Time_Stamp():
+        x = dt.datetime.today()
+        TimeStamp = x.strftime("%Y%m%d%H%M%S")
+        return TimeStamp
+    TimeStamp = Time_Stamp()
+    start=dt.datetime.today()
+    Start_Time = start.strftime('%H:%M:%S')
+    Run_Date = dt.datetime.today().strftime("%Y-%m-%d")
+    
+    '''------------------------------------------------------------------------------------------------------
+    ' Getting Environment varaibles
+    '------------------------------------------------------------------------------------------------------'''
+    User_Id =getpass.getuser()
+    CAPATH = r"\\Va10dwvcat300\UNISHARE$\SELF_CA_" + User_Id
+    FCAT_Type_Variable = ""
+    List_Path = r"\\Va10dwvcat300\cadept$\SELF_CA_HIDE\Python\FCAT"
+    FCAT_Temp_Stage = r"\\Va10dwvcat300\cadept$\Files\Staging"
+    ListFile = List_Path+"\TD_Servers.lst"
+    CAT_PS_File = List_Path+"\K9aBcSrmNipyfile.txt"
+    
+    usrComputerName = socket.gethostname()
+    
+    '''---------------------------------------------------------------------
+    'BTEQ utility checking.
+    '---------------------------------------------------------------------'''
+    Bteq_Tmp_File = ""
+    Bteq_Tmp_File =  distutils.spawn.find_executable("bteq.exe")
+    if len(Bteq_Tmp_File) == 0 :
+        #print("BTEQ teradata utility is mandatory to execute CAT/FCAT. Please raise IT service connect ticket to install Teradata Client Components.\n \n Also make sure to run CAT/FCAT from Anthem or Daas machine.")
+        sys.exit("BTEQ teradata utility is mandatory to execute CAT/FCAT. Please raise IT service connect ticket to install Teradata Client Components.\n \n Also make sure to run CAT/FCAT from Anthem or Daas machine.")
+    '''---------------------------------------------------------------------
+    'Identifying Server Details
+    '---------------------------------------------------------------------'''
+    def Get_File_Details():
+        Final_Tmp_Str = ""
+        ObjPwdFile = open(CAT_PS_File, "r")
+        PwdArray = ObjPwdFile.readlines()
+        for ListStrchar in PwdArray:
+            ListArray = ListStrchar.split("#")
+            if ListArray[0] == "DWDEV":
+                Input_Str = ListArray[1].strip()
+        Total_In_Str = Input_Str
+        while len(Total_In_Str) > 0:
+            Str_Ch = Total_In_Str[:2]
+            Final_Tmp_Str = Final_Tmp_Str+(chr(int(Str_Ch)+23))
+            Total_In_Str = Total_In_Str[2:]
+        return Final_Tmp_Str   
+    
+    Final_Tmp_Str=Get_File_Details()
+    
+    with open(ListFile, "r") as ObjListFile:
+        ListStrcharArr =ObjListFile.readlines()
+    for ListStrchar in ListStrcharArr:
+        ListArray = ListStrchar.split("#")
+        if ListArray[0] == "DWDEV" :
+            TD_IP_Str = ListArray[1].strip().replace("\n","")+","+Final_Tmp_Str
+    
+    '''------------------------------------------------------------------------------------------------------
+     Mail Send Logic
+    '------------------------------------------------------------------------------------------------------'''
+    def mail_to_user(SBJ,MSG_BODY,Mail_Str):
+        sender = 'unicenter@anthem.com'
+        receivers = Mail_Str
+        try:
+           msg = MIMEMultipart()
+           smtpObj = smtplib.SMTP('smtp.corp.anthem.com')    
+           msg = MIMEMultipart()
+           msg["From"] = sender
+           msg["To"] = ",".join(receivers)
+           msg["Subject"] = SBJ
+           text = MIMEText(MSG_BODY)
+           msg.attach(text)
+           smtpObj.sendmail(sender, receivers, msg.as_string())
+        except :
+           #print ("Error: unable to send email.")
+           sys.exit("Error: unable to send email.")
+    '''------------------------------------------------------------------------------------------------------
+     Quit the code
+    '------------------------------------------------------------------------------------------------------'''
+    def End_Process(ICRF_FileName):
+        if os.path.isfile(ICRF_FileName) == True :
+            year = int(TimeStamp[:4])
+            month = int(TimeStamp[4:6])
+            day = int(TimeStamp[6:8])
+            hour = int(TimeStamp[8:10])
+            minute = int(TimeStamp[10:12])
+            second = int(TimeStamp[12:14])
+            date = dt.datetime(year=year, month=month, day=day, hour=hour, minute=minute, second=second)
+            modTime = time.mktime(date.timetuple())
+            shutil.move(ICRF_FileName, CAPATH+"\ICRF_FORMS_BKP_D\\"+ICRF_Name+"_"+TimeStamp+".csv")
+            os.utime(CAPATH+"\ICRF_FORMS_BKP_D\\"+ICRF_Name+"_"+TimeStamp+".csv", (modTime, modTime))
+    
+    '''------------------------------------------------------------------------------------------------------
+    'Checking the existence of the Code Assessment folder structure.
+    '------------------------------------------------------------------------------------------------------'''
+    Folder_Str = "ICRF_BTEQ_D,ICRF_DONEFILES_D,ICRF_FORMS_BKP_D,ICRF_FORMS_D,ICRF_LIST_D,ICRF_LOGS_D,ICRF_PARM_D,ICRF_WF_XML_D,ICRF_BTEQ_TMP_D,ICRF_BTEQ_LOGS_D"
+    Str_Array = Folder_Str.split(",")
+    for fol_name in Str_Array:
+        Folder_Path = CAPATH+"\\"+fol_name
+        if os.path.isdir(Folder_Path) == False:
+            #print("Please execute ICRF_DEV_FOLDERS.exe before executing FCAT.")
+            sys.exit("Please execute ICRF_DEV_FOLDERS.exe before executing FCAT.")
+    '''------------------------------------------------------------------------------------------------------
+    ' Getting ICRF_CSV File Name
+    '------------------------------------------------------------------------------------------------------'''
+    #ICRF_FileName = input("Enter ICRF_CSV File Name:")
+    ICRF_FileName = sys.argv[1]
+    #if len(ICRF_FileName.strip()) == 0 :
+    if ICRF_FileName.strip() == "empty" :
+        #print("ICRF form name is mandatory to to continue FCAT or PROD_Baseline process.")
+        sys.exit("ICRF form name is mandatory to continue FCAT or PROD_Baseline process.")
+    else:
+        if ICRF_FileName.find("\\") >= 0 and ICRF_FileName.find(".") > 0:
+            Pos1 = ICRF_FileName.rfind(".")
+            Pos2 = ICRF_FileName.rfind("\\")
+            ICRF_Name = ICRF_FileName[Pos2 + 1:Pos1]
+        elif ICRF_FileName.find(".") > 0 :
+            Pos1 = ICRF_FileName.rfind(".")
+            ICRF_Name = ICRF_FileName[:Pos1]
+            ICRF_FileName = CAPATH+"\ICRF_FORMS_D\\"+ICRF_FileName
+        if ICRF_FileName[-4:].upper() != ".CSV" :
+            #print("Enter a valid ICRF CSV form name.")
+            sys.exit("Enter a valid ICRF CSV form name.")
+        if os.path.isfile(ICRF_FileName) == False:
+            #print(ICRF_FileName + " does not exist.")
+            sys.exit(ICRF_FileName + " does not exist.")
+    if len(FCAT_Type_Variable) == 0 :
+        Wo_Str = ICRF_Name[0:4]
+        Temp_WO_Str = ICRF_Name[4:]
+        if ( Temp_WO_Str.find("I") > 0 or Temp_WO_Str.find("D") > 0 or Temp_WO_Str.find("B") > 0 or Temp_WO_Str.find("O") > 0 ) and Wo_Str == "RITM":
+            if Temp_WO_Str.find("I") > 0 :
+                Pos1 = Temp_WO_Str.find("I")
+                Wo_Nmbr = Temp_WO_Str[:Pos1]
+                IPT_Nmbr = ICRF_Name[ICRF_Name.rfind("I")+1:]
+                Form_WO_Number = ICRF_Name[:ICRF_Name.rfind("I")]
+            elif Temp_WO_Str.find("D") > 0 :
+                Pos1 = Temp_WO_Str.find("D")
+                Wo_Nmbr = Temp_WO_Str[:Pos1]
+                IPT_Nmbr = ICRF_Name[ICRF_Name.rfind("D")+1:]
+                Form_WO_Number = ICRF_Name[:ICRF_Name.rfind("D")]
+            elif Temp_WO_Str.find("B") > 0 :
+                Pos1 = Temp_WO_Str.find("B")
+                Wo_Nmbr = Temp_WO_Str[:Pos1]
+                IPT_Nmbr = ICRF_Name[ICRF_Name.rfind("B")+1:]
+                Form_WO_Number = ICRF_Name[:ICRF_Name.rfind("B")] 
+            elif Temp_WO_Str.find("O") > 0 :
+                Pos1 = Temp_WO_Str.find("O")
+                Wo_Nmbr = Temp_WO_Str[:Pos1]
+                IPT_Nmbr = ICRF_Name[ICRF_Name.rfind("O")+1:]
+                Form_WO_Number = ICRF_Name[:ICRF_Name.rfind("O")]
+            if Wo_Str != "RITM" or Wo_Nmbr.isdigit() == False or IPT_Nmbr.isdigit() == False:
+                End_Process(ICRF_FileName)
+                #print("Naming convention for the ICRF form name should be <RITMxxxxxxxIxxxx.csv> or <RITMxxxxxxxDxxxx.csv> or <RITMxxxxxxxBxxxx.csv> or <RITMxxxxxxxOxxxx.csv> to continue the FCAT process.")
+                sys.exit("Naming convention for the ICRF form name should be <RITMxxxxxxxIxxxx.csv> or <RITMxxxxxxxDxxxx.csv> or <RITMxxxxxxxBxxxx.csv> or <RITMxxxxxxxOxxxx.csv> to continue the FCAT process.")
+        else:
+            End_Process(ICRF_FileName)
+            #print("Naming convention for the ICRF form name should be <RITMxxxxxxxIxxxx.csv> or <RITMxxxxxxxDxxxx.csv> or <RITMxxxxxxxBxxxx.csv> or <RITMxxxxxxxOxxxx.csv> to continue the FCAT process.")
+            sys.exit("Naming convention for the ICRF form name should be <RITMxxxxxxxIxxxx.csv> or <RITMxxxxxxxDxxxx.csv> or <RITMxxxxxxxBxxxx.csv> or <RITMxxxxxxxOxxxx.csv> to continue the FCAT process.")
+    
+    '''------------------------------------------------------------------------------------------------------
+    ' Reading data from CSV file & Storing into Arrays
+    '------------------------------------------------------------------------------------------------------'''
+    Not_Processed = ""
+    CSVArrayIdx = 0
+    CSV_Line = 0
+    Emp_Line = 0
+    Form_Type = ""
+    XML_FOUND = False
+    TD_CORRECT = False
+    CSV_line_no = ""
+    Version_Fld = ""
+    ICRF_NAME_Temp = ICRF_Name
+    with open(ICRF_FileName) as csvfile:
+        readCSV = csv.reader(csvfile, delimiter=',')
+        readCSVArry = [row for row in readCSV]
+        csv_len = len(readCSVArry)
+        CSV_Line = 0
+        for csv_row in readCSVArry:
+            if CSV_Line < csv_len:
+                if CSV_Line == 0:
+                    HeadArray = csv_row
+                    HeadArr_Length = len(HeadArray)
+                    if HeadArr_Length > 47:
+                        Last_Fld = HeadArray[48]
+                        if Last_Fld.upper() != "Unique Identifier".upper():
+                            #print("Please use ICRF form new template.")
+                            csvfile.close()
+                            End_Process(ICRF_FileName)
+                            sys.exit("Please use ICRF form new template.")
+                    else:
+                        #print("Please use ICRF form new template.")
+                        csvfile.close()
+                        End_Process(ICRF_FileName)
+                        sys.exit("Please use ICRF form new template.")
+                    Type_Fld = HeadArray[4]
+                    if Type_Fld == "Source Repository" :
+                        Form_Type = "INFA"
+                    elif Type_Fld == "Target Environment" :
+                        Form_Type = "UNIX"
+                elif CSV_Line == 1 :
+                    Version_Array = csv_row
+                    if len(Version_Array) > 5 and Form_Type == "UNIX" :
+                        Version_Fld = Version_Array[6]
+                    elif len(Version_Array) > 6 :
+                        Version_Fld = Version_Array[7]
+                    if len(Version_Fld) > 0 :
+                        if Version_Fld == "1.1" or Version_Fld == "1.2" :                        
+                            '''------------------------------------------------------------------------------------------------------
+                            ' Getting Team Lead US Domain Id
+                            '------------------------------------------------------------------------------------------------------'''
+                            #Team_Lead_Id = raw_input("Enter Tech Lead or Code Approver's US Domain ID:")
+                            Team_Lead_Id = sys.argv[2]
+                            #if len(Team_Lead_Id.strip()) == 0:
+                            if Team_Lead_Id.strip() == "empty":
+                                #print("Tech Lead or Code Approver's US Domain ID is mandatory to continue the PROD_Baseline or FCAT process.")
+                                csvfile.close()
+                                End_Process(ICRF_FileName)
+                                sys.exit("Tech Lead or Code Approver's US Domain ID is mandatory to continue the PROD_Baseline or FCAT process.")
+                            elif Team_Lead_Id.find(" ")+1 > 0:
+                                #print("Please make sure that Tech Lead or Code Approver's US Domain ID should not contain any spaces.")
+                                csvfile.close()
+                                End_Process(ICRF_FileName)
+                                sys.exit("Please make sure that Tech Lead or Code Approver's US Domain ID should not contain any spaces.")
+                        else:
+                            #print("Please use ICRF form new template.")
+                            csvfile.close()
+                            End_Process(ICRF_FileName)
+                            sys.exit("Please use ICRF form new template.")
+                    else:
+                        #print("Please use ICRF form new template.")
+                        csvfile.close()
+                        End_Process(ICRF_FileName)
+                        sys.exit("Please use ICRF form new template.")                                
+                    USERID = Version_Array[2]
+                    Temp_Mail = ""
+                    Mail_Str = []
+                    if len(USERID) > 0:
+                        Temp_Mail = USERID.split(";")
+                        if len(Temp_Mail) > 0:                   
+                            for m in range(len(Temp_Mail)):
+                                Mail_Str.append(Temp_Mail[m].strip()+"@wellpoint.com")
+                        if len(Mail_Str) == 0 :
+                            #print("In ICRF CSV form, Requestor US Domain ID is a mandatory field.")
+                            csvfile.close()
+                            End_Process(ICRF_FileName)
+                            sys.exit("In ICRF CSV form, Requestor US Domain ID is a mandatory field.")
+                        else:
+                            CSV_Email = Mail_Str
+                    else :
+                        csvfile.close()
+                        End_Process(ICRF_FileName)
+                        sys.exit("In ICRF CSV form, Requestor US Domain ID is a mandatory field.")
+                    WO_Number =Version_Array[0].strip()
+                    PVID = Version_Array[1].strip()
+                    IMP_Date = Version_Array[3].strip()
+                    if IMP_Date == "N/A" :
+                        #print("In ICRF CSV form, Please provide Imp Review Date.")
+                        csvfile.close()
+                        End_Process(ICRF_FileName)
+                        sys.exit("In ICRF CSV form, Please provide Imp Review Date.")
+                    if Form_Type == "UNIX" :
+                        Target_Environment = Version_Array[4].strip()
+                        TD_SERVER = Version_Array[5].strip()
+                        Barometer_Id = Version_Array[7].strip()
+                        Bamboo_Application_Name = Version_Array[8].strip()
+                        Bamboo_Application_Name = Bamboo_Application_Name.replace(" ","_")
+                        if Barometer_Id.find("#")+1 > 0:
+                            Barometer_Id = Barometer_Id.replace("#","")
+                        Target_Server = Target_Environment
+                        with open(ListFile) as ObjListFile:
+                            ListStrcharArr = ObjListFile.readlines()
+                        for ListStrchar in ListStrcharArr:
+                            ListArray = ListStrchar.split("#")
+                            if ListArray[0].strip() != "DWPROD2" :
+                                if len(All_Servers) > 0 :
+                                    All_Servers = All_Servers + "/" + ListArray[0].strip()
+                                else:
+                                    All_Servers = ListArray[0].strip()
+                            if ListArray[0].strip() == TD_SERVER.upper() :
+                                TD_CORRECT = True            
+                    else:
+                        Source_Repository = Version_Array[4].strip()
+                        Target_Repository = Version_Array[5].strip()
+                        Target_Environment = Version_Array[6].strip()
+                        Barometer_Id = Version_Array[8].strip()
+                        Bamboo_Application_Name = Version_Array[9].strip()
+                        Bamboo_Application_Name = Bamboo_Application_Name.replace(" ","_")
+                        if Barometer_Id.find("#")+1 > 0:
+                            Barometer_Id = Barometer_Id.replace("#","")
+                        Target_Server = Target_Environment                
+                    Env_ListFile = List_Path+"\Target_Env.lst"
+                    ENV_CORRECT = False
+                    with open(Env_ListFile) as ObjListFile:
+                        Env_ListStrcharArr = ObjListFile.readlines()
+                        for ListStrchar in Env_ListStrcharArr:
+                            EnvListStrchar = ListStrchar.strip()
+                            if EnvListStrchar[0:2] != "##" and len(EnvListStrchar) > 0 :
+                                if EnvListStrchar == Target_Environment:
+                                    ENV_CORRECT = True
+                                    break
+                        if ENV_CORRECT == False and len(FCAT_Type_Variable) == 0 :
+                            SBJ = "FCAT should be performed only for clear case/Bitbucket migrations. Please verify Target Environment in the ICRF form: "+ICRF_NAME_Temp+".csv"
+                            MSG_BODY = "FCAT Process was Stopped."
+                            mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                            csvfile.close()
+                            End_Process(ICRF_FileName)
+                            sys.exit("FCAT should be performed only for clear case migrations. Please verify Target Environment in the ICRF form: "+ICRF_NAME_Temp+".csv")
+                    
+                elif  CSV_Line == 4:
+                    if len(FCAT_Type_Variable) == 0:
+                        if Form_Type == "INFA" :
+                            if len(PVID) == 0 or len(WO_Number) == 0 or len(Target_Environment) == 0 or len(Source_Repository) == 0 or len(Target_Repository) == 0 or len(IMP_Date) == 0:
+                                SBJ = "In the form :"+ICRF_NAME_Temp+" Planview ID, RITM Number, Target Environment, Source Repository, Target Repository, IMPlementation Review Date are mandatory fields."
+                                MSG_BODY = "FCAT Process was Stopped."
+                                mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                                csvfile.close()
+                                End_Process(ICRF_FileName)
+                                #print("In the form :"+ICRF_FileName+" Planview ID, RITM Number, Target Environment, Source Repository, Target Repository, IMPlementation Review Date are mandatory fields.")
+                                sys.exit("In the form :"+ICRF_NAME_Temp+" Planview ID, RITM Number, Target Environment, Source Repository, Target Repository, IMPlementation Review Date are mandatory fields.")
+                        elif Form_Type == "UNIX" :
+                            if len(PVID) == 0 or len(WO_Number) == 0 or len(Target_Environment) == 0 or len(Target_Server) == 0 or len(IMP_Date) == 0:
+                                SBJ = "In the form :"+ICRF_NAME_Temp+" Planview ID, RITM Number, Target Environment, Teradata Server, IMPlementation Review Date are mandatory fields."
+                                MSG_BODY = "FCAT Process was Stopped."
+                                mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                                csvfile.close()
+                                End_Process(ICRF_FileName)
+                                #print("In the form :"+ICRF_FileName+" Planview ID, RITM Number, Target Environment, Teradata Server, IMPlementation Review Date are mandatory fields.")
+                                sys.exit("In the form :"+ICRF_NAME_Temp+" Planview ID, RITM Number, Target Environment, Teradata Server, IMPlementation Review Date are mandatory fields.")
+                        if WO_Number.lower() != ICRF_Name.lower():
+                            SBJ = "In the form :"+ICRF_NAME_Temp+" RITM Number on the ICRF form name should match with RITM number given in the ICRF Form."
+                            MSG_BODY = "FCAT Process was Stopped."
+                            mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                            csvfile.close()
+                            End_Process(ICRF_FileName)
+                            sys.exit(SBJ)
+                elif CSV_Line > 4:
+                    CSV_Count = 0
+                    CSV_StrChar1 = csv_row
+                    CSV_StrCharArray = csv_row
+                    CSV_Start = 1
+                    if len(CSV_StrCharArray) > 5:
+                        if len(CSV_StrCharArray[0]) == 0:
+                            SBJ = "In the form :"+ICRF_NAME_Temp+" Source Server is a mandatory field."
+                            MSG_BODY = "FCAT Process was Stopped."
+                            mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                            csvfile.close()
+                            End_Process(ICRF_FileName)
+                            #print("In the form :"+ICRF_FileName+" Source Server is a mandatory field.")
+                            sys.exit("In the form :"+ICRF_NAME_Temp+" Source folder name is a mandatory field.")
+                        elif CSV_StrCharArray[0].find("\\") + 1 > 0 and Form_Type ==  "INFA" :
+                            SBJ = "In the form :"+ICRF_NAME_Temp+" Please provide valid Informatica Source Folder."
+                            MSG_BODY = "FCAT Process was Stopped."
+                            mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                            csvfile.close()
+                            End_Process(ICRF_FileName)
+                            #print("In the form :"+ICRF_FileName+" Please provide valid Informatica Source Folder.")
+                            sys.exit("In the form :"+ICRF_NAME_Temp+" Please provide valid Informatica Source Folder.")
+                        if len(CSV_StrCharArray[0]) == 0 and len(CSV_StrCharArray[1]) == 0 and len(CSV_StrCharArray[2]) == 0 and len(CSV_StrCharArray[3]) == 0 and len(CSV_StrCharArray[4]) == 0 and len(CSV_StrCharArray[5]) == 0 and len(CSV_StrCharArray[6]) == 0:
+                            Emp_Line = Emp_Line + 1
+                        else:
+                            if Emp_Line > 0:
+                                CSVArrayIdx = CSVArrayIdx + Emp_Line
+                            if Form_Type == "UNIX" :                            
+                                #try:  
+                                CSV_Obj_Name=CSV_StrCharArray[2].strip()
+                                Source_Ser_Arr.append(CSV_StrCharArray[0].strip())
+                                PathArray.append(CSV_StrCharArray[1].strip())
+                                ObjArray.append(CSV_StrCharArray[2].strip())
+                                ParmArray.append(CSV_StrCharArray[6].strip())
+                                Tgt_pathArray.append(CSV_StrCharArray[3].strip())
+                                ObjFolderArr.append("")
+                                Parm_Name = CSV_StrCharArray[6].strip()
+                                if (CSV_Obj_Name.lower().find(".sh") > 0 or CSV_Obj_Name.lower().find(".ksh") > 0) and len(TD_SERVER) == 0:
+                                    SBJ = "Form:"+ ICRF_NAME_Temp+".csv:Teradata Server Name is Mandatory to assess Bteq scripts."
+                                    MSG_BODY = "FCAT Process was Stopped."
+                                    mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                                    csvfile.close()
+                                    End_Process(ICRF_FileName)
+                                    #print("Form:"+ ICRF_Name+":TERADATA SERVER NAME is Mandatory to assess Bteq scripts.")
+                                    sys.exit(ICRF_NAME_Temp + ":Teradata Server Name is Mandatory to assess Bteq scripts.")
+                                elif (CSV_Obj_Name.lower().find(".sh") > 0 or CSV_Obj_Name.lower().find(".ksh") > 0) and TD_CORRECT == False and Parm_Name.find("/") < 0 :                               
+                                    MSG_BODY = "FCAT Process was Stopped."
+                                    SBJ = "Form:"+ICRF_NAME_Temp+".csv:Teradata server name should be " + All_Servers
+                                    mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                                    csvfile.close()
+                                    End_Process(ICRF_FileName)
+                                    #print("Form:"+ICRF_NAME_Temp+".csv:Teradata server name should be " + All_Servers)
+                                    sys.exit(ICRF_NAME_Temp + ".csv:Teradata server name should be " + All_Servers)
+    #                            except:
+    #                                pass
+                            elif Form_Type == "INFA" :
+                                try:
+                                    PathArray.append(CSV_StrCharArray[5].strip())
+                                    ObjArray.append(CSV_StrCharArray[1].strip()) 
+                                    ObjFolderArr.append(CSV_StrCharArray[0].strip())
+                                    Source_Ser_Arr.append("")
+                                    ParmArray.append("")
+                                    Tgt_pathArray.append("")
+                                except:
+                                    pass
+            CSV_Line = CSV_Line + 1
+    
+    '''------------------------------------------------------------------------------------------------------
+    ' Creating Objects Listfile with ICRF_CSV File Name 
+    '------------------------------------------------------------------------------------------------------'''
+    CSV_ObjListFileName = CAPATH + "\ICRF_LIST_D\\"+ ICRF_Name + ".lst"
+    if os.path.isfile(CSV_ObjListFileName) == True :
+        os.rename(CSV_ObjListFileName, CAPATH + "\ICRF_LIST_D\\"+ICRF_Name+"_"+TimeStamp+".lst")
+    CSV_ObjListFile = open(CSV_ObjListFileName,"w")
+    Proceed_Flag = True
+    CSV_Line_No = 5
+    if len(FCAT_Type_Variable) == 0:
+        for Tmp_CsvObjPath in PathArray:
+            CSV_Line_No += 1
+            if ((Tmp_CsvObjPath.lower().find("\\va10papnas001a\dept6") < 0 and Tmp_CsvObjPath.lower().find("\\va10vnas005a6\dept6") < 0 and Tmp_CsvObjPath.lower().find("\\va10vnas006a7\dept6") < 0 and Tmp_CsvObjPath.lower().find("\\va10pwvbam319\dept6") < 0) and Tmp_CsvObjPath.find("/") < 0) and len(Tmp_CsvObjPath) > 0 :
+                Proceed_Flag = False
+                SBJ = "Form:"+ICRF_NAME_Temp+".csv:Row#"+str(CSV_Line_No)+":Please specify the Clear Case path and re-submit the ICRF form."
+                MSG_BODY = "FCAT Process was Stopped."
+                mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                End_Process(ICRF_FileName)
+                sys.exit("Form:"+ICRF_NAME_Temp+".csv:Row#"+str(CSV_Line_No)+":Please specify the Clear Case path and re-submit the ICRF form.")
+    First_Time = False
+    OTHER_FILES_COUNT = 0
+    Track_Other_Flag = False
+    if Proceed_Flag == True :
+        CSV_FLAG = False
+        for j in range(len(ObjArray)):
+            CsvObjName = ObjArray[j]
+            CsvObjPath = PathArray[j]
+            ParmName = ParmArray[j]
+            Tgt_Path = Tgt_pathArray[j]
+            Obj_Folder = ObjFolderArr[j]
+            Source_Ser = Source_Ser_Arr[j]
+            Track_NonCC_Flag = False
+            if len(CsvObjPath) == 0 and len(CsvObjName) != 0 and Form_Type == "UNIX" :
+                CSV_Line_No += 1
+                CSV_Line_No,CSV_FLAG,Not_Processed = Track_Not_processed(CSV_Line_No,CSV_FLAG,Not_Processed)
+                SBJ = "Form:"+ICRF_NAME_Temp+":Row#"+str(CSV_Line_No)+":No-path."
+                MSG_BODY = ""
+                mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                #print("FORM:"+ICRF_NAME_Temp+":ROW#"+CSV_Line_No+":No-Path")
+                #sys.exit("FORM:"+ICRF_NAME_Temp+":ROW#"+CSV_Line_No+":No-Path")
+            elif len(CsvObjPath) != 0 and len(CsvObjName) ==0 :
+                CSV_Line_No += 1
+                CSV_Line_No,CSV_FLAG,Not_Processed = Track_Not_processed(CSV_Line_No,CSV_FLAG,Not_Processed)
+                SBJ = "Form:"+ICRF_NAME_Temp+":Row#"+str(CSV_Line_No)+":No-Object."
+                MSG_BODY = ""
+                mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                #print("FORM:"+ICRF_NAME_Temp+":ROW#"+CSV_Line_No+":No-Object")
+            elif len(Tgt_Path) == 0 and Form_Type == "UNIX" :
+                CSV_Line_No += 1
+                CSV_Line_No,CSV_FLAG,Not_Processed = Track_Not_processed(CSV_Line_No,CSV_FLAG,Not_Processed)
+                SBJ = "Form:"+ICRF_NAME_Temp+":Row#"+str(CSV_Line_No)+":No-TargetPath."
+                MSG_BODY = ""
+                mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                #print("FORM:"+ICRF_NAME_Temp+":ROW#"+CSV_Line_No+":No-TargetPath.")
+            elif ((len(Obj_Folder) == 0 and Form_Type == "INFA") or (len(Source_Ser) == 0 and Form_Type == "UNIX")) and len(FCAT_Type_Variable) == 0 :
+               CSV_Line_No += 1
+               CSV_Line_No,CSV_FLAG,Not_Processed = Track_Not_processed(CSV_Line_No,CSV_FLAG,Not_Processed)
+               if Form_Type == "UNIX" :
+                   SBJ = "Form:"+ICRF_NAME_Temp+":Row#"+str(CSV_Line_No)+":No-SourceServer."
+                   MSG_BODY = ""
+                   mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                   #print("FORM:"+ICRF_NAME_Temp+":ROW#"+CSV_Line_No+":No-SourceServer.")
+               else:
+                   SBJ = "Form:"+ICRF_NAME_Temp+":Row#"+str(CSV_Line_No)+":No-SourceFolder."
+                   MSG_BODY = ""
+                   mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                   #print("FORM:"+ICRF_NAME_Temp+":ROW#"+CSV_Line_No+":No-SourceFolder.")
+            elif len(CsvObjPath) == 0 and len(CsvObjName) == 0:
+                pass
+            else:
+                if CsvObjPath.rfind("\\") > 0:
+                    if CsvObjPath[len(CsvObjPath)-1:] != "\\" :
+                        CsvObjPath = CsvObjPath + "\\"
+                    if len(CsvObjName) != 0:
+                        '''----------------------------------------------------------------------------------------
+                        ' Writing the bteq objects into ICRF objects Listfile
+                        '------------------------------------------------------------------------------------------'''
+                        if ( CsvObjName.lower().find(".sh") > 0 or CsvObjName.lower().find(".ksh") > 0 ) and Form_Type == "UNIX" :
+                            CSV_Line_No += 1
+                            if len(ParmName) == 0:
+                                CSV_Line_No,CSV_FLAG,Not_Processed = Track_Not_processed(CSV_Line_No,CSV_FLAG,Not_Processed)
+                                SBJ = "Form:"+ICRF_NAME_Temp+":Row#"+str(CSV_Line_No)+":Parameter file is mandatory to assess Bteq scripts."
+                                MSG_BODY = ""
+                                mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                                #print("Form:"+ICRF_NAME_Temp+":Row#"+CSV_Line_No+":Parameter file is mandatory to assess Bteq scripts.")
+                            elif ParmName[ParmName.find(".")+1:].lower() != "parm" and ParmName[ParmName.find(".")+1:].lower() != "prm" and ParmName[ParmName.find(".")+1:].lower() != "par" and ParmName[ParmName.find(".")+1:].lower() != "env" :
+                                CSV_Line_No,CSV_FLAG,Not_Processed = Track_Not_processed(CSV_Line_No,CSV_FLAG,Not_Processed)
+                                SBJ = "Form:"+ICRF_NAME_Temp+":Row#"+str(CSV_Line_No)+":Parameter file not mentioned properly."
+                                MSG_BODY = "FCAT Process was Stopped."
+                                mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                                #print("Form:"+ICRF_NAME_Temp+":Row#"+CSV_Line_No+":Parameter file not mentioned properly.")
+                            else:
+                                CsvObjName_ext = CsvObjName[CsvObjName.rfind("."):]
+                                if CsvObjName.lower().find(".sh") > 0:
+                                    BTEQArray = CsvObjName.split(CsvObjName_ext)
+                                    CSV_ObjListFile.write(CsvObjPath.strip()+BTEQArray[0].strip()+".sh"+"|"+ParmName.strip()+"|"+TD_SERVER.strip()+"|"+PVID.strip()+"|"+Tgt_Path.strip()+"\n")
+                                elif CsvObjName.lower().find(".ksh") > 0:
+                                    BTEQArray = CsvObjName.split(CsvObjName_ext)
+                                    CSV_ObjListFile.write(CsvObjPath.strip()+BTEQArray[0].strip()+".ksh"+"|"+ParmName.strip()+"|"+TD_SERVER.strip()+"|"+PVID.strip()+"|"+Tgt_Path.strip()+"\n")
+                        #Writing the .xml objects into objects Listfile
+                        elif Form_Type == "INFA" and (CsvObjName.lower().find(".xml") > 0 or CsvObjName.find(".") < 0):
+                            CsvObjName_ext = CsvObjName[CsvObjName.rfind("."):]
+                            if CsvObjName.lower().find(".xml") > 0:
+                                XMLArray = CsvObjName.split(CsvObjName_ext)
+                                CSV_ObjListFile.write(CsvObjPath.strip()+XMLArray[0].strip()+".xml"+"|"+PVID.strip()+"|"+Obj_Folder.strip()+"\n")
+                            else:
+                                CSV_ObjListFile.write(CsvObjPath.strip()+CsvObjName.strip()+".xml"+"|"+PVID.strip()+"|"+Obj_Folder.strip()+"\n")
+                        else:
+                            Track_NonCC_Flag = True
+                    else:
+                        pass
+                elif CsvObjPath.find("/") + 1 > 0 or ( len(CsvObjPath) == 0 and Form_Type == "INFA"):
+                    Track_NonCC_Flag = True
+                if Track_NonCC_Flag == True:
+                    Track_Other_Flag = True
+                    OTHER_FILES_COUNT = OTHER_FILES_COUNT + 1
+                    if First_Time == False and len(FCAT_Type_Variable) == 0:
+                        Rnd_No = random.randint( 1, 100000 )
+                        Unique_Identifier_Info = User_Id+"_"+str(Rnd_No)+"_"+TimeStamp
+                        
+                        Metrics_Data = CAPATH+"\ICRF_LIST_D\\"+Form_WO_Number+".txt"
+                        Metrics_Data_File = open(Metrics_Data, 'w')
+                        First_Time = True
+                    if First_Time == True:
+                        Metrics_Data_File.write(Unique_Identifier_Info+"|"+CsvObjName+"\n")
+    else:
+        pass
+    
+    CSV_ObjListFile.close()
+    if Track_Other_Flag == True and First_Time == True :
+        Metrics_Data_File.close()
+    
+    
+    '''------------------------------------------------------------------------------------------------------
+    ' Sending Email about the not processed Rows
+    '------------------------------------------------------------------------------------------------------'''
+    if Not_Processed != "" :
+        if len(FCAT_Type_Variable) == 0:
+            SBJ = Not_Processed+"-Rows are not processed.FCAT Process was Stopped, make sure file extensions or paths mentioned correctly in the ICRF form."
+            MSG_BODY = ""
+            mail_to_user(SBJ,MSG_BODY,Mail_Str)
+            End_Process(ICRF_FileName)
+            #print(Not_Processed+"-Rows are not processed.FCAT Process was Stopped, make sure file extensions or paths mentioned correctly in the ICRF form.")
+            sys.exit(Not_Processed+"-Rows are not processed.FCAT Process was Stopped, make sure file extensions or paths mentioned correctly in the ICRF form.")
+    
+    '''------------------------------------------------------------------------------------------------------
+    ' Check whether the generated ICRF Objects Listfile is empty
+    '------------------------------------------------------------------------------------------------------'''
+    Form_Exist = False
+    if os.stat(CSV_ObjListFileName).st_size == 0 :
+        if (len(Not_Processed) == 0 and (Track_Other_Flag == True or Track_NonCC_Flag == True)) and len(FCAT_Type_Variable) == 0:
+            #End_Process(ICRF_FileName)        
+            '''-------------------------------------------------------------------------------
+             'Logic to write the Unique Identifier in ICRF form
+             '-------------------------------------------------------------------------------'''
+            csvFile = ICRF_FileName
+            with open(csvFile) as ObjcsvListFile:
+                csvStrcharArr = ObjcsvListFile.readlines()
+            
+            csvObjFile = open(csvFile, "w")
+            Upd_Line =""
+            for Id in range(len(csvStrcharArr)):
+                if Id ==1 :
+                    csvArray = csvStrcharArr[Id].split(",")
+                    for k in range(len(csvArray)):
+                        if k == 48:
+                            Upd_Line = Upd_Line+","+Unique_Identifier_Info
+                        elif k == 0:
+                          Upd_Line = csvArray[k] 
+                        else:
+                            Upd_Line = Upd_Line +","+csvArray[k]
+                    
+                    csvObjFile.write(Upd_Line+"\n")
+                else:
+                    csvObjFile.write(csvStrcharArr[Id])
+            csvObjFile.close()
+            
+            if Form_Type == "UNIX" :
+                Target_Location = FCAT_Temp_Stage+"\\"+Target_Environment+"\\UNIX"
+            elif Form_Type == "INFA" :
+                Target_Location = FCAT_Temp_Stage+"\\"+Target_Environment+"\\INFA"
+            
+            Temp_ICRF_File = CAPATH+"\\ICRF_LIST_D\\"+ICRF_Name+"_"+TimeStamp+".csv"
+            shutil.copy(ICRF_FileName, Temp_ICRF_File)
+            
+            if os.path.isfile(Target_Location+"\\"+ICRF_Name+".csv") == True :
+                SBJ = "ICRF form with the name " +ICRF_Name+".csv already exists in the FCAT temporary staging folder."
+                MSG_BODY = ""
+                mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                Form_Exist = True
+                #os.remove(ICRF_FileName)
+                End_Process(ICRF_FileName)
+                sys.exit("ICRF form with the name " +ICRF_Name+".csv already exists in the FCAT temporary staging folder.")
+            else:
+                shutil.copy(ICRF_FileName, Target_Location+"\\"+ICRF_Name+".csv")
+                End_Process(ICRF_FileName)
+                
+            if Form_Exist == False:
+                SBJ = "FCAT process is completed for the form: " +ICRF_Name+".csv."
+                MSG_BODY = "Code review is successful. FCAT transferred the ICRF form to DIS Self-Service staging area. DIS self service process will pick the ICRF form in the next self-service interval and will perform migration."
+                mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                Source_Location = Temp_ICRF_File
+                Target_Location_Ca = r"\\Va10dwvcat300\cadept$\Files\CA_LOGS\FCAT_LOGS\\"+User_Id
+                if os.path.isdir(Target_Location_Ca) == False :
+                    os.mkdir(Target_Location_Ca)
+                shutil.copy(Source_Location , Target_Location_Ca)
+                try:
+                    os.remove(Temp_ICRF_File)
+                except:
+                    pass
+                
+            '''------------------------------------------------------------------------------
+            'Logic to track the metrics details
+            '------------------------------------------------------------------------------'''
+            TimeStamp = Time_Stamp()
+            end=dt.datetime.today()
+            End_Time=end.strftime('%H:%M:%S')
+            Process_Time = dt.datetime.strptime(End_Time, '%H:%M:%S') - dt.datetime.strptime(Start_Time, '%H:%M:%S')
+            Log_count = 0
+            DBA_Process_Results = 0
+            PLAN_VIEW_ID = PVID
+            Errors = 0
+            Xml_count = 0
+            Sh_count = 0
+            Work_Order_No = ICRF_Name
+            IM_IMP_Date = IMP_Date
+            Target_Environment_Tmp = Target_Environment
+            EXCEPTION_APPROVALl = "NA"
+            ASSESSMENT_TYPE = "FCAT"
+            if IM_IMP_Date.find("/") > 0:
+                Str_IMdate = IM_IMP_Date.split("/")
+                if len(Str_IMdate[2]) == 4 :
+                    if len(Str_IMdate[1]) == 1 :
+                        Dat="0"+Str_IMdate[1]
+                    else:
+                        Dat=Str_IMdate[1]
+                    if len(Str_IMdate[0]) == 1 :
+                        Mnt="0"+Str_IMdate[0]
+                    else:
+                        Mnt=Str_IMdate[0]
+                    if int(Mnt) > 12 :
+                        IM_IMP_Date="8888-12-31"
+                    elif int(Mnt) <= 12 :
+                        IM_IMP_Date = Str_IMdate[2]+"-"+str(Mnt)+"-"+str(Dat)
+                    elif int(Dat) <= 12 :
+                        IM_IMP_Date = Str_IMdate[2]+"-"+str(Mnt)+"-"+str(Dat)
+                else:
+                    IM_IMP_Date="8888-12-31"
+            else:
+                IM_IMP_Date="8888-12-31"
+            '''-----------------------------------------------------------------
+             'Create a bteq file to load the metrics details into the CA_METRICS
+             '------------------------------------------------------------------'''
+            Metrics_Bteq = CAPATH+"\ICRF_BTEQ_TMP_D\\"+ICRF_Name+"_Metrics_BTEQ_"+TimeStamp+".btq"
+            Metrics_Bteq_File = open(Metrics_Bteq, 'w+')
+            ASSESSMENT_TYPE = "FCAT"
+            
+            Metrics_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+            Metrics_Bteq_File.write('\n')
+            Metrics_Bteq_File.write(".SET WIDTH 65531;\n")
+            Metrics_Bteq_File.write('\n')
+            Metrics_Bteq_File.write("DATABASE EDW_V20_CODE_REVIEW_OUT;\n")
+            Metrics_Bteq_File.write('\n')
+            Metrics_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+            Metrics_Bteq_File.write('\n')
+            Metrics_Bteq_File.write("INSERT INTO CA_METRICS ( User_Id, PLAN_VIEW_ID, ICRF_FORM_NAME, NUMBER_OF_LOGS, ERRORS, START_TIME, END_TIME,PROCESS_TIME, RUN_DATE, DBA_PROCESS_RESULTS, NUMBER_OF_XMLS, NUMBER_OF_BTEQS,TECHLEAD_ID, WO_NUMBER,IM_IMPL_REVIEW_DATE, TARGET_SERVER_OR_REPOSITORY, UNIQUE_IDENTIFIER, SELF_SERVICE_STAGING_AREA, EXCEPTION_APPROVALl, ASSESSMENT_TYPE, OTHER_FILES_COUNT, BAROMETER_ID, BAMBOO_PLAN_APPLICATION_NAME, COMPUTER_NAME ) \n")
+            Metrics_Bteq_File.write("VALUES (")
+            Metrics_Bteq_File.write("'"+User_Id+"'"+",\n")
+            Metrics_Bteq_File.write("'"+PLAN_VIEW_ID+"'"+",\n")
+            Metrics_Bteq_File.write("'"+ICRF_Name+"'"+",\n")
+            Metrics_Bteq_File.write(str(Log_count)+",\n")
+            Metrics_Bteq_File.write(str(Errors)+",\n")
+            Metrics_Bteq_File.write("'"+Start_Time+"'"+",\n")
+            Metrics_Bteq_File.write("'"+End_Time+"'"+",\n")
+            Metrics_Bteq_File.write("'"+str(Process_Time)+"'"+",\n")
+            Metrics_Bteq_File.write("'"+Run_Date+"'"+",\n")
+            Metrics_Bteq_File.write(str(DBA_Process_Results)+",\n")
+            Metrics_Bteq_File.write(str(Xml_count)+",\n")
+            Metrics_Bteq_File.write(str(Sh_count)+",\n")
+            Metrics_Bteq_File.write("'"+Team_Lead_Id+"'"+",\n")
+            Metrics_Bteq_File.write("'"+Work_Order_No+"'"+",\n")
+            Metrics_Bteq_File.write("'"+IM_IMP_Date+"'"+",\n")
+            Metrics_Bteq_File.write("'"+Target_Server+"'"+",\n")
+            Metrics_Bteq_File.write("'"+Unique_Identifier_Info+"'"+",\n")
+            Metrics_Bteq_File.write("'"+Target_Environment_Tmp+"'"+",\n")
+            Metrics_Bteq_File.write("'"+EXCEPTION_APPROVALl+"'"+",\n")
+            Metrics_Bteq_File.write("'"+ASSESSMENT_TYPE+"'"+",\n")
+            Metrics_Bteq_File.write(str(OTHER_FILES_COUNT)+",\n")
+            Metrics_Bteq_File.write("'"+Barometer_Id+"'"+",\n")
+            Metrics_Bteq_File.write("'"+Bamboo_Application_Name+"'"+",\n")
+            Metrics_Bteq_File.write("'PY-"+usrComputerName+"'"+");\n")
+            Metrics_Bteq_File.write('\n') 
+            Metrics_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+            Metrics_Bteq_File.write('\n')
+            
+            '''-----------------------------------------------------------------
+            'Logic to load the metrics details from the data file
+            '------------------------------------------------------------------'''
+            Metrics_Bteq_File.write(".IMPORT VARTEXT '|' FILE="+Metrics_Data+'\n')
+            Metrics_Bteq_File.write(".QUIET ON\n")
+            Metrics_Bteq_File.write(".REPEAT *\n")
+            Metrics_Bteq_File.write("USING UNIQUE_IDENTIFIER (VARCHAR(100)), FILE_NAME (VARCHAR(255))\n")
+            Metrics_Bteq_File.write("INSERT INTO EDW_V20_CODE_REVIEW_OUT.CA_NO_FCAT ( UNIQUE_IDENTIFIER, FILE_NAME )\n")
+            Metrics_Bteq_File.write("VALUES (\n")
+            Metrics_Bteq_File.write(":UNIQUE_IDENTIFIER, :FILE_NAME );\n")
+            
+            Metrics_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+            Metrics_Bteq_File.write('\n')
+            Metrics_Bteq_File.write(".LOGOFF\n")
+            Metrics_Bteq_File.write(".QUIT 0\n")
+            Metrics_Bteq_File.write(".lABEL ERRORS\n")
+            Metrics_Bteq_File.write(".QUIT ERRORCODE\n")
+            Metrics_Bteq_File.close()        
+            
+            TimeStamp = Time_Stamp()
+            Bteq_log = CAPATH+"\ICRF_BTEQ_LOGS_D\\"+ICRF_Name+"_Metrics_BTEQ_Log_"+TimeStamp+".txt"
+    
+            input = open(Metrics_Bteq, 'rb').read()
+            rc = Popen(['bteq.exe',TD_IP_Str], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+            out, err = rc.communicate(input=input)
+            with open(Bteq_log, "w") as outfile:
+                outfile.write(out.decode())
+            return_Code = rc.returncode
+            
+            if return_Code > 0 :
+                try:
+                    os.remove(Metrics_Bteq)
+                except Exception:
+                    pass
+                try:
+                    os.remove(Bteq_log)
+                except Exception:
+                    pass
+                try:
+                    os.remove(Metrics_Data)
+                except Exception:
+                    pass
+                SBJ=User_Id+" FCAT METRICS LOAD FAILED FOR THE FORM: "+ICRF_NAME_Temp+" ,WITH RETURN CODE:"""+str(return_Code)
+                MSG_BODY="FCAT METRICS DETAILS WERE NOT LOADED"
+                sender = 'unicenter@anthem.com'
+                receivers = 'DL-IMCodeAssessSupp@anthem.com'
+                msg = MIMEMultipart()
+                smtpObj = smtplib.SMTP('smtp.corp.anthem.com')    
+                msg = MIMEMultipart()
+                msg["From"] = sender
+                msg["To"] = receivers
+                msg["Subject"] = SBJ
+                text = MIMEText(MSG_BODY)
+                msg.attach(text)
+                smtpObj.sendmail(sender, receivers, msg.as_string())
+            else:
+                try:
+                    os.remove(Metrics_Bteq)
+                    #pass
+                except Exception:
+                    pass
+                try:
+                    os.remove(Bteq_log)
+                except Exception:
+                    pass
+            if Track_Other_Flag == True:
+                try:
+                    os.remove(Metrics_Data)                
+                except Exception:
+                    pass
+                sys.exit(0)
+        else:
+            SBJ = "Make sure file extensions or paths are mentioned correctly in the ICRF form."
+            MSG_BODY = "FCAT Process was Stopped."
+            mail_to_user(SBJ,MSG_BODY,Mail_Str)
+            End_Process(ICRF_FileName)
+            sys.exit("Make sure file extensions or paths are mentioned correctly in the ICRF form.")
+    else:
+        pass
+    '''----------------------------------------------------------------------------------------------
+    ' SECOND OUTER Logic -- Reading the Entries in the objects Listfile
+    '----------------------------------------------------------------------------------------------'''
+    Rnd_No = random.randint( 1, 100000 )
+    Unique_Identifier_Info = User_Id+"_"+str(Rnd_No)+"_"+TimeStamp
+    Unique_Identifier_Folder = TimeStamp
+    Missed_Objects = ""
+    ParmIdx = 0
+    Cid = 0
+    First_Time = False
+    ListIdx = 0
+    LOGArray,ListName = [],[]
+    with open(CSV_ObjListFileName, 'r') as ObjListFile:
+        List_StrChar_Arr = ObjListFile.readlines()
+    Work_Order_No = ICRF_Name
+    for List_StrChar in List_StrChar_Arr:
+        Object_Name = List_StrChar.strip()
+        if Object_Name.find(".xml" ) > 0 :
+            Objects_Array = Object_Name.split("|")
+            Obj_Name = Objects_Array[0]
+            PVId = Objects_Array[1]
+            ObjFolder = Objects_Array[2]
+            WF_File_name = Obj_Name[Obj_Name.rfind("\\")+1:]
+            if os.path.isfile(Obj_Name) == True :
+                if First_Time == False :
+                    Wf_path = CAPATH+"\\ICRF_WF_XML_D\\"+Unique_Identifier_Folder
+                    if os.path.isdir(Wf_path) == False :
+                        os.mkdir(Wf_path)
+                    First_Time = True
+                Object_Name = Wf_path+"\\"+WF_File_name+"|"+PVId+"|"+ObjFolder
+                FOUND = False
+                for k in range(len(ListName)):
+                    if ListName[k] == Object_Name :
+                        FOUND = True
+                if FOUND == False :
+                    shutil.copy(Obj_Name , Wf_path+"\\"+WF_File_name)
+                    ListName.append(Object_Name)
+                    ListIdx = ListIdx + 1
+                else:
+                    Obj_Name_Temp = chr(34)+Obj_Name+chr(34)
+                    SBJ = "In-FORM: "+ICRF_Name+"-Object:"+Obj_Name_Temp+"-Is-Duplicated."
+                    MSG_BODY = ""
+                    mail_to_user(SBJ,MSG_BODY,Mail_Str)
+            else:
+                if len(Missed_Objects) == 0 :
+                    Missed_Objects = Missed_Objects+Obj_Name
+                else:
+                    Missed_Objects = Missed_Objects+","+Obj_Name
+        elif Object_Name.find(".sh" ) > 0 or Object_Name.find(".ksh" ) > 0 :
+            Objects_Array = Object_Name.split("|")
+            Parm_Found = False
+            if len(Objects_Array) == 5:
+                Obj_Name = Objects_Array[0]
+                Parm_name = Objects_Array[1]
+                TD_Server = Objects_Array[2]
+                PVId = Objects_Array[3]
+                Tgt_path = Objects_Array[4]
+                
+                Parm_File_name = Parm_name[Parm_name.rfind("\\")+1:]
+                Parm_Path = Parm_name[0:Parm_name.rfind("\\")]
+                Script_File_name = Obj_Name[Obj_Name.rfind("\\")+1:]
+            if os.path.isfile(Parm_name) == True :
+                if os.path.isfile(Obj_Name) == True :
+                    if First_Time == False :
+                        ScriptPath = CAPATH+"\\ICRF_BTEQ_D\\"+Unique_Identifier_Folder
+                        if os.path.isdir(ScriptPath) == False :
+                            os.mkdir(ScriptPath)
+                        First_Time = True
+                    Object_Name = ScriptPath+"\\"+Script_File_name+"|"+Parm_Path+"\\"+Parm_File_name+"|"+TD_Server+"|"+PVId+"|"+Tgt_path
+                    FOUND = False
+                    for k in range(len(ListName)):
+                        LObj_Name = ListName[k]
+    #                    if ListName[k].find("|") > 0 :
+    #                        LObj_Name = ListName[k][0:ListName[k].find("|")]
+                        if LObj_Name == Object_Name :
+                            FOUND = True
+                    if FOUND == False :
+                        shutil.copy(Obj_Name , ScriptPath+"\\"+Script_File_name)
+                        ListName.append(Object_Name)
+                        ListIdx = ListIdx + 1
+                    else:
+                        Obj_Name_Temp = chr(34)+Obj_Name+chr(34)
+                        SBJ = "In-FORM: "+ICRF_Name+"-Object:"+Obj_Name_Temp+"-Is-Duplicated."
+                        MSG_BODY = ""
+                        mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                else:
+                    if len(Missed_Objects) == 0 :
+                        Missed_Objects = Missed_Objects+Obj_Name
+                    else:
+                        Missed_Objects = Missed_Objects+","+Obj_Name
+            else:
+                if len(Missed_Objects) == 0 :
+                    Missed_Objects = Missed_Objects+Obj_Name
+                else:
+                    Missed_Objects = Missed_Objects+","+Obj_Name
+    
+    if len(Missed_Objects) > 0 :
+        Missed_Objects_Temp = chr(34)+Missed_Objects+chr(34)
+        SBJ = "Form:"+ICRF_NAME_Temp+".csv:Objects does not exist in given path. FCAT process is stopped, make sure objects exists in given path."
+        MSG_BODY = Missed_Objects_Temp
+        mail_to_user(SBJ,MSG_BODY,Mail_Str)
+        End_Process(ICRF_FileName)
+        sys.exit("Form:"+ICRF_NAME_Temp+".csv:Objects does not exist in given path.")
+    
+    '''----------------------------------------------------------------------------------------------
+    ' Overwrite ObjectListFile by removing the duplicate entries, the objects which are not available
+    '----------------------------------------------------------------------------------------------'''
+    with open(CSV_ObjListFileName, 'w') as ObjListFile:
+        for i in range(len(ListName)):
+            ObjListFile.write(ListName[i]+"\n")
+    
+    '''------------------------------------------------------------------------------------------------------
+    ' Check whether the Overwritten ICRF Objects Listfile is empty
+    '------------------------------------------------------------------------------------------------------'''
+    CSV_Size = os.stat(CSV_ObjListFileName)
+    if CSV_Size.st_size == 0 :
+        SBJ = "FCAT Process stopped, Make Sure Objects Exists in the given path."
+        MSG_BODY = "FCAT Process was Stopped."
+        mail_to_user(SBJ,MSG_BODY,Mail_Str)
+        End_Process(ICRF_FileName)
+        #print("FCAT Process stopped, Make Sure Objects Exists in the given path.")
+        sys.exit("FCAT Process stopped, Make Sure Objects Exists in the given path.")
+        
+    '''--------------------------------------------------
+    ' Third outer
+    ---------------------------------------------------'''
+    ICRFArray,Baseline_Share_Path,Share_obj_name = [],'',''
+    LOGArray, Env_Name, Path_Unix, Path_XML,Tgt_Path_Details_Array,Mtr_Tmp_Arr,Objects_Names_APIDS = [],[],[],[],[],[],[]
+    LOG_Content,ICRF_Content,No_Errors_Arr,List_Obj_Name,Summary_Export_Array,List_New_Obj_Name,List_Obj_Path_Details = [],[],[],[],[],[],[]
+    Proceed_Mig, Conn_Str, Object_Nm,Prod_Flag,Summary_Metrics_Bteq,Ser_Rep_Nm,Obj_con_name,Ser_Head_Found,Ser_Rep_Nm_One,Old_Obj_Present = '','','','','','','','','',''
+    Ident_Fol_Path = r"\\va10dwvcat300\cadept$\Files"
+    MsgFile_Name = List_Path + "\Msg_List_Python.lst"
+    
+    User_Id =getpass.getuser()
+    
+    usrComputerName = socket.gethostname()
+    mail_id = User_Id  + "@anthem.com"
+    LOGArrayIdx = -1
+    Errors = 0
+    DBA_Process_Results_Err = 0
+    DBA_Process_Results_War = 0
+    from os import walk
+    '''--------------------------------------------------------------------------------------------------
+    ' Function to Remove Multiple Spaces and Tabs
+    '--------------------------------------------------------------------------------------------------'''
+    def TrimEx(str1):
+        str1=str1.replace("\t"," ").strip()
+        for i in range(len(str1),1,-1):
+            strChars = " "*i
+            str1 = str1.replace(strChars, " ")
+        str1=str1.replace("\t"," ").strip()
+        return str1
+    with open(MsgFile_Name, 'r') as ObjMsgFile:
+        MsgFile_Arr = ObjMsgFile.readlines()
+    # Log file formatting function
+    def logfile_format1(Script_Name):
+        ObjLogFile = open(LogFile_Name, 'a')
+        Standard_Msg = ""
+        for Msg_Line in MsgFile_Arr:
+            if Msg_Line.strip().find(Script_Name)+1 > 0:
+                Standard_Msg = Msg_Line[Msg_Line.find(";")+1:].replace("\n","")
+                break
+            else:
+                Standard_Msg = ""
+        ObjLogFile.write('\t'+Script_Name+Standard_Msg+'\n')                         
+        ObjLogFile.write("---------------------------------------------------\n")
+        ObjLogFile.close()
+        
+     # Log file formatting function
+    def logfile_format2(rc,Script_Name):  
+        global Fail_obj
+        if rc > 0 :
+            Fail_obj = "CHECK: "+Script_Name+"_failed_with_Returncode#"+str(rc)+" .\n"
+            if len(Fail_obj) > 0 and Script_Name.find("CA_COMMENTS_REMOVAL") == -1 :
+                Object_Name_Temp = chr(34)+Object_Name1+chr(34)     
+                SBJ=  "FCAT PY check failed: "+User_Id+":Object: "+Object_Name_Temp 
+                MSG_BODY = Fail_obj
+                sender = 'unicenter@anthem.com'
+                receivers = 'DL-IMCodeAssessSupp@anthem.com'
+                msg = MIMEMultipart()
+                smtpObj = smtplib.SMTP('smtp.corp.anthem.com')    
+                msg = MIMEMultipart()
+                msg["From"] = sender
+                msg["To"] = receivers
+                msg["Subject"] = SBJ
+                text = MIMEText(MSG_BODY)
+                msg.attach(text)
+                smtpObj.sendmail(sender, receivers, msg.as_string())
+        ObjLogFile = open(LogFile_Name, 'a')
+        ObjLogFile.write("===================================================\n")
+        ObjLogFile.close()
+    '''------------------------------------------------------------------------------------------------------
+    ' Creating Objects Listfile Name From ICRF_CSV File Name 
+    '------------------------------------------------------------------------------------------------------'''
+    ICRF_FileName = ICRF_FileName.replace("#CA#"," ")
+    Target_Environment = Target_Environment.replace("#CA#"," ")
+    Target_Server = Target_Server.replace("#CA#"," ")
+    
+    
+    Pos1 = ICRF_FileName.rfind(".")
+    Pos2 = ICRF_FileName.rfind("\\")
+    ICRF_Name = ICRF_FileName[Pos2 + 1:Pos1]
+    ICRF_Name_Temp = ICRF_Name
+    ObjectsListFile = ICRF_Name+".lst"
+    
+    with open(ListFile, "r") as ObjListFile:
+        ListStrcharArr =ObjListFile.readlines()
+    for ListStrchar in ListStrcharArr:
+        ListArray = ListStrchar.split("#")
+        if ListArray[0] == "DWDEV" :
+            TD_IP_Str = ListArray[1].strip().replace("\n","")+","+Final_Tmp_Str
+    
+    
+    '''------------------------------------------------------------------------------------------------------
+    '                    Reading the contents from Objects Listfile
+    '------------------------------------------------------------------------------------------------------'''
+    ObjectsListFile = CAPATH+"\ICRF_LIST_D\\"+ObjectsListFile
+    Line_cnt = 0
+    Line_cnt_tot = 0
+    Consolidated_Log =""
+    DBA_Consolidated_Log =""
+    Consol_Head_Flag = False
+    DBA_Consol_Head_Flag = False
+    DBA_CONS_1stObj_Name = False
+    prev_Object_Name1 = ""
+    Form_type = "" 
+    Eid = 0
+    Prod_Obj_info = ""
+    Path_Idx = 0
+    First_Time_Bteq = False
+    First_Ser_NM = False
+    with open(ObjectsListFile,'r') as ObjListFile:
+        Object_Nm_Arr = ObjListFile.readlines()
+    Tgt_Path_Details_Array = ['']*len(Object_Nm_Arr)
+    List_Obj_Name,List_New_Obj_Name,List_Obj_Path_Details = ['']*len(Object_Nm_Arr),['']*len(Object_Nm_Arr),['']*len(Object_Nm_Arr)
+    for Object_Nm in Object_Nm_Arr:
+        Objects_Array = Object_Nm.strip().split("|")
+        if Object_Nm.lower().find(".xml") > 0 :
+            Path_Obj_name = Objects_Array[0]
+            Tgt_Path_or_Fol_name = Objects_Array[2]
+            Form_type = "INFA"
+            Baseline_Share_Path = r"\\Va10dwvcat300\cadept$\Files\Scripts\BASE_LINE_LOGS\INFA"
+            Prod_Paths_File_1 = r"\\Va10dwvcat300\cadept$\SELF_CA_HIDE\Python\FCAT\Obj_INFA_Prod_Fold.lst"
+            Ser_Rep_Nm = Target_Repository
+        elif Object_Nm.lower().find(".sh" ) > 0 or Object_Nm.lower().find(".ksh" ) > 0 :
+            Path_Obj_name = Objects_Array[0]
+            Tgt_Path_or_Fol_name = Objects_Array[4].strip()
+            Form_type = "BTEQ"
+            Baseline_Share_Path = r"\\Va10dwvcat300\cadept$\Files\Scripts\BASE_LINE_LOGS\UNIX"
+            Prod_Paths_File_1 = r"\\Va10dwvcat300\cadept$\SELF_CA_HIDE\Python\FCAT\Obj_Unix_Prod_Paths.lst"
+            Ser_Rep_Nm = Target_Environment
+        Path_Obj_name = Path_Obj_name[Path_Obj_name.rfind("\\")+1:]
+        if Path_Obj_name.rfind("_APID") > 0 :
+            APID_Temp = Path_Obj_name[Path_Obj_name.rfind("_"):len(Path_Obj_name)]
+            if APID_Temp.find("_APID")+1 > 0 :
+                if Path_Obj_name[-3:] == ".sh" :
+                    Path_Obj_name = Path_Obj_name[0:Path_Obj_name.rfind("_APID")]+".sh"
+                elif Path_Obj_name[-4:] == ".ksh" :
+                    Path_Obj_name = Path_Obj_name = Path_Obj_name[0:Path_Obj_name.rfind("_APID")]+".ksh"
+                APID_Temp = ""
+        List_Obj_Name[Path_Idx] = Path_Obj_name
+        List_New_Obj_Name[Path_Idx] = Path_Obj_name+"|"+Tgt_Path_or_Fol_name
+        List_Obj_Path_Details[Path_Idx] = Path_Obj_name+"|"+Tgt_Path_or_Fol_name
+        with open(Prod_Paths_File_1, 'r') as ObjPathFile:
+            Temp_Path_Str_Arr = ObjPathFile.readlines()
+        Prod_Flag = False 
+        Ser_Head_Found = False
+        Temp_Prod_Path_Fol = ""
+        for Temp_Path_Str in Temp_Path_Str_Arr:
+            Temp_Path_Str= Temp_Path_Str.strip()
+            if Temp_Path_Str.find("######")+1 > 0 and Ser_Head_Found == False :
+                S_Pos1 = Temp_Path_Str.find("---")+3
+                S_Pos2 = Temp_Path_Str.rfind("---")
+                Temp_Ser_Nm = Temp_Path_Str[S_Pos1:S_Pos2]
+                if Temp_Ser_Nm.find("/") > 0 :
+                    Ser_Rep_NM = {}
+                    List_Ser_Nm    = Temp_Ser_Nm.split("/")
+                    for i in range(len(List_Ser_Nm)):       
+                        Ser_Rep_NM[i] = List_Ser_Nm[i]
+                for j in range(len(List_Ser_Nm)):
+                    if Ser_Rep_Nm.upper() == Ser_Rep_NM[j].upper() or Ser_Rep_Nm.upper() == Temp_Ser_Nm.upper():
+                        Ser_Head_Found = True
+                        break
+            elif Temp_Path_Str.find("######") == -1 and Ser_Head_Found == True :
+                if Temp_Path_Str.find("^CA^") > 0 :
+                    Path_Str = Temp_Path_Str.split("^CA^")
+                    Temp_Prod_Path_Fol = Path_Str[0]
+                    Temp_Path_Fol_1 = Path_Str[1]
+                    Temp_Path_Fol_2 = Path_Str[2]
+                else:
+                    Temp_Prod_Path_Fol = Temp_Path_Str
+                    Temp_Path_Fol_1 = Temp_Path_Str
+                    Temp_Path_Fol_2 = "NA"
+                if Tgt_Path_or_Fol_name[-1:] != "/" and Form_type == "BTEQ" :
+                    Tgt_Path_or_Fol_name = Tgt_Path_or_Fol_name+"/"
+                if Tgt_Path_or_Fol_name.lower() == Temp_Path_Fol_1.lower() or Tgt_Path_or_Fol_name.lower() == Temp_Path_Fol_2.lower() : 
+                    Tgt_Path_Details_Array[Path_Idx] = Temp_Prod_Path_Fol
+                    if First_Time_Bteq == False :
+                        Summary_Metrics_Bteq = CAPATH+"\ICRF_BTEQ_TMP_D\\"+ICRF_Name+"_Summary_Metrics_BTEQ_"+TimeStamp+".btq"
+                        Summary_Metrics_Bteq_Export_FileName= CAPATH+"\ICRF_BTEQ_LOGS_D\Summary_Query_Export_File_Line"+TimeStamp+".txt"
+                        Summary_Metrics_Bteq_File = open(Summary_Metrics_Bteq, 'w+')
+                        
+                        Summary_Metrics_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+                        Summary_Metrics_Bteq_File.write(".SET WIDTH 65531;\n")
+                        Summary_Metrics_Bteq_File.write(".SET ERROROUT STDOUT;\n")
+                        Summary_Metrics_Bteq_File.write(".Set Separator '|'\n")
+                        Summary_Metrics_Bteq_File.write(".set TITLEDASHES OFF\n")
+                        Summary_Metrics_Bteq_File.write("\n")
+                        Summary_Metrics_Bteq_File.write("DATABASE EDW_V20_CODE_REVIEW_OUT;\n")
+                        Summary_Metrics_Bteq_File.write("\n")
+                        Summary_Metrics_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+                        Summary_Metrics_Bteq_File.write("\n")
+                        Summary_Metrics_Bteq_File.write(".EXPORT REPORT FILE = "+Summary_Metrics_Bteq_Export_FileName+";\n")
+                        First_Time_Bteq = True
+                    if Form_type == "BTEQ" : 
+                        Summary_Metrics_Bteq_File.write("Select script_name,error_count,script_path,EXCEPTION_UNIQUE_IDENTIFIER From production_unix_scripts Where script_name = '"+Path_Obj_name+"' and script_path ='"+Path_Str[0]+"' ;\n")
+                    else:
+                        Path_Obj_name = Path_Obj_name[:Path_Obj_name.rfind(".")]
+                        Ser_Rep_Nm = Ser_Rep_Nm.replace(Ser_Rep_Nm[Ser_Rep_Nm.find("_"):Ser_Rep_Nm.rfind("_")+1],"_Prod_")
+                        if First_Ser_NM == False :
+                            Ser_Rep_Nm_One = Ser_Rep_Nm
+                            First_Ser_NM = True
+                        Summary_Metrics_Bteq_File.write("Select INFA_WORKFLOW_NAME,error_count,INFA_FOLDER_NAME,REPOSITORY_NAME,EXCEPTION_UNIQUE_IDENTIFIER From PRODUCTION_INFA_WORKFLOWS Where INFA_WORKFLOW_NAME = '"+Path_Obj_name+"' and INFA_FOLDER_NAME = '"+Tgt_Path_or_Fol_name+"' and REPOSITORY_NAME = '"+Ser_Rep_Nm+"';\n")
+                    Summary_Metrics_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+                    Summary_Metrics_Bteq_File.write("\n")
+                    List_Obj_Name[Path_Idx] = List_Obj_Name[Path_Idx]+"|"+Temp_Prod_Path_Fol
+                    List_Obj_Path_Details[Path_Idx] = Path_Obj_name+"|"+Temp_Prod_Path_Fol
+                    Prod_Flag = True 
+                    break
+            elif Temp_Path_Str.find("######") > 0 and Ser_Head_Found == True :
+                break
+        if Temp_Prod_Path_Fol not in List_Obj_Name[Path_Idx]:
+            List_Obj_Name[Path_Idx] = List_Obj_Name[Path_Idx]+"|"+Temp_Prod_Path_Fol
+        ObjPathFile.close()
+        if Ser_Head_Found == False :
+            break
+        if Prod_Flag == False :
+            Prod_Obj_info = Prod_Obj_info+"^CA^"+Path_Obj_name
+        Path_Idx = Path_Idx + 1
+    ObjListFile.close()
+    
+    if Ser_Head_Found == False :
+        if Form_type == "BTEQ" : 
+            MSG="Please specify valid Target Environment.\n Select EDLSIT/EDLSIT2/EDLSITXM/EDLSIT2XM/EDLFT/EDLFTXM/BISIT/BISITXM/BIFT/BIFTXM/DXUAT/DXUATXM/WCCSIT/WCCUSASIT/FEPDEV/NEUAT"
+        else:
+            MSG="Please specify valid Repository name.\n Select EDL_Sit_RS/EDL_Sit2_RS/EDL_FT_RS/BI_Sit_RS/BI_FT_RS/DX_Uat_RS/WCC_Sit_RS/FEP_Dev_RS/NE_Uat_RS"
+        SBJ="FCAT process has been stopped for the form:"+ICRF_Name_Temp+".csv."
+        mail_to_user(SBJ,MSG,Mail_Str)
+        End_Process(ICRF_FileName)
+        #print(MSG)
+        sys.exit(MSG)
+    if First_Time_Bteq == True :    
+        Summary_Metrics_Bteq_File.write("\n")
+        Summary_Metrics_Bteq_File.write(".LOGOFF\n")
+        Summary_Metrics_Bteq_File.write(".lABEL ERRORS\n")
+        Summary_Metrics_Bteq_File.write(".QUIT ERRORCODE\n")
+        Summary_Metrics_Bteq_File.close()
+        
+        Summary_Bteq_log = CAPATH+"\ICRF_BTEQ_LOGS_D\\"+ICRF_Name+"Summary_Metrics_BTEQ_"+TimeStamp+".txt"
+        
+        input = open(Summary_Metrics_Bteq, 'rb').read()
+        rc = Popen(['bteq.exe',TD_IP_Str], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+        out, err = rc.communicate(input=input)
+        with open(Summary_Bteq_log, "w") as outfile:
+            outfile.write(out.decode())
+        return_Code = rc.returncode
+        if return_Code > 0 :
+            try:
+                os.remove(Summary_Metrics_Bteq)
+            except Exception:
+                pass
+            try:
+                os.remove(Summary_Bteq_log)
+            except Exception:
+                pass
+            try:
+                os.remove(Summary_Metrics_Bteq_Export_FileName)
+            except Exception:
+                pass
+            MSG_BODY="FOR THE USER "+User_Id+" FCAT PRODUCTION OBJECT VERIFICATION FAILED ,WITH RETURN CODE:"+str(return_Code)
+            SBJ="FCAT PROCESS HAS BEEN STOPPED."    
+            End_Process(ICRF_FileName)
+            mail_to_user(SBJ,MSG_BODY,Mail_Str)
+            #print("FOR THE USER "+User_Id+" FCAT PRODUCTION OBJECT VERIFICATION FAILED ,WITH RETURN CODE:"+str(return_Code))
+            sys.exit("FOR THE USER "+User_Id+" FCAT PRODUCTION OBJECT VERIFICATION FAILED ,WITH RETURN CODE:"+str(return_Code))
+        else:
+            try:
+                os.remove(Summary_Metrics_Bteq)
+            except Exception:
+                pass
+            try:
+                os.remove(Summary_Bteq_log)
+            except Exception:
+                pass
+            with open(Summary_Metrics_Bteq_Export_FileName, 'r') as ExpFile:
+                Exp_Objects_Detais_Arr = ExpFile.readlines()
+            Exp_Cnt = 0
+            for Exp_Objects_Detais in Exp_Objects_Detais_Arr:
+                Exp_Objects_Detais= TrimEx(Exp_Objects_Detais)
+                if Exp_Objects_Detais.find("INFA_WORKFLOW_NAME") == -1 and Exp_Objects_Detais.find("SCRIPT_NAME") == -1 : 
+                    Summary_Export_Array.append(Exp_Objects_Detais)
+                    Exp_Cnt = Exp_Cnt + 1
+            try:
+                os.remove(Summary_Metrics_Bteq_Export_FileName)
+            except Exception:
+                pass
+            Base_Line_Obj_Info = ""
+            for Lid in range(len(List_Obj_Name)):
+                List_Obj_Nm_det = List_Obj_Name[Lid].split("|")
+                List_Obj_Nm = List_Obj_Nm_det[0].strip()
+                if Form_type == "INFA" : 
+                    List_Obj_Nm = List_Obj_Nm[:List_Obj_Nm.rfind(".xml")]
+                List_Obj_Nm_Path = List_Obj_Nm_det[1].strip()
+                for Sid in range(len(Summary_Export_Array)):
+                    Sum_Objects_Array = Summary_Export_Array[Sid].split("|")
+                    Sum_Obj_Name = Sum_Objects_Array[0].strip()
+                    Sum_Obj_Count = Sum_Objects_Array[1].strip()
+                    Sum_Obj_Path = Sum_Objects_Array[2].strip()
+    #                'msgbox Sum_Obj_Name+"======="+Sum_Obj_Path
+                    if List_Obj_Nm.lower() == Sum_Obj_Name.lower() and List_Obj_Nm_Path.lower() == Sum_Obj_Path.lower() :
+                        if Sum_Obj_Count == "?" :
+                            Base_Line_Obj_Info = Base_Line_Obj_Info +"^CA^"+List_Obj_Nm
+            if len(Base_Line_Obj_Info) > 0 :
+                Base_Line_Obj_Info = Base_Line_Obj_Info.replace("^CA^","\n")
+                SBJ="FCAT PROCESS HAS BEEN STOPPED for the form:"+ICRF_Name_Temp+".csv."
+                MSG_BODY="Below objects are Not baselined.\n"+Base_Line_Obj_Info+"\n\nPlease execute the PROD Baseline process to Baseline the existing production objects."
+                End_Process(ICRF_FileName)
+                mail_to_user(SBJ,MSG_BODY,Mail_Str)
+                #print("FCAT PROCESS HAS BEEN STOPPED for the form:"+ICRF_Name_Temp+".csv.")
+                sys.exit("FCAT PROCESS HAS BEEN STOPPED for the form:"+ICRF_Name_Temp+".csv. objects are Not baselined.")
+    continue_flag = False
+    Fol_First = False
+    Objects_Names_APIDS = ['']*len(Object_Nm_Arr)
+    Line_cnt = 0
+    for Line_cnt in range(len(Object_Nm_Arr)):
+        Fail_obj = ""
+        Line_cnt = Line_cnt
+        Object_Nm = Object_Nm_Arr[Line_cnt]
+        if Object_Nm.find(".xml" ) > 0 :
+            Objects_Array = Object_Nm.split("|")
+            Object1 =  Objects_Array[0]
+            Object_Name = Object1[:Object1.rfind(".")]
+            Object_Name1 = Object1[:Object1.rfind(".")+4]
+            PLAN_VIEW_ID = Objects_Array[1]
+            Object_Folder = Objects_Array[2]
+        elif Object_Nm.find(".sh" ) > 0 or Object_Nm.find(".ksh" ) > 0 :
+            Objects_Array = Object_Nm.split("|")
+            if len(Objects_Array) == 5 :
+                Object1 = Objects_Array[0]
+                Object_Name = Object1[:Object1.rfind(".")]
+                if Object_Nm.find(".sh" ) > 0 :
+                    Object_Name1 = Object1[:Object1.rfind(".")+3]
+                elif Object_Nm.find(".ksh" ) > 0 :
+                    Object_Name1 = Object1[:Object1.rfind(".")+4]
+                Parm_name = Objects_Array[1]
+                TD_Server = Objects_Array[2]
+                PLAN_VIEW_ID = Objects_Array[3]
+                Tgt_path = Objects_Array[4]
+        Object_Name1 = Object_Name1[Object_Name1.rfind("\\")+1:]
+        Objects_Names_APIDS[Line_cnt] = Object_Name1
+        
+        if prev_Object_Name1.lower() == Object_Name1.lower():
+            DBA_Consol_Head_Flag = False 
+        Log_path = CAPATH+"\ICRF_LOGS_D\\"+ICRF_Name
+        if os.path.isdir(Log_path) == False and Fol_First == False :
+            os.mkdir(Log_path)
+            Fol_First = True
+        elif Fol_First == False :
+            shutil.move(Log_path, Log_path+"_"+TimeStamp)
+            os.mkdir(Log_path)
+            Fol_First = True
+        Object_Name = Object_Name[Object_Name.rfind("\\")+1:]
+        ''''------------------------------------------------------------------------------------
+        ' Performing the check for each entry in the Objects Listfile if no done file exists.
+        '------------------------------------------------------------------------------------'''
+        done_file = CAPATH+"\ICRF_DONEFILES_D\\"+ICRF_Name+"_"+Object_Name+".done"
+        if Line_cnt == 0 :
+            if os.path.isfile(done_file) == False :
+                Consolidated_Log = Log_path+"\\"+ICRF_Name+"_Consolidated_log_"+TimeStamp+".txt"
+                if os.path.isfile(Consolidated_Log) == False:
+                    ObjConsLogFile = open(Consolidated_Log, 'w')
+                    ObjConsLogFile.close()
+                if Form_type == "BTEQ" :
+                    DBA_Consolidated_Log = Log_path+"\Teradata_CodeReview_"+ICRF_Name+"_Consolidated_log_"+TimeStamp+".txt"
+                    if os.path.isfile(DBA_Consolidated_Log) == False:
+                        ObjDBAConsLogFile = open(DBA_Consolidated_Log, 'w')
+                        ObjDBAConsLogFile.close()
+        if os.path.isfile(done_file) == False :
+            LogFile_Name = Log_path+"\\"+ICRF_Name+"_"+Object_Name+"_log_"+TimeStamp+".txt"
+            if os.path.isfile(LogFile_Name) == False:
+                ObjLogFile = open(LogFile_Name, 'w')
+                ObjLogFile.close()
+            
+            '''------------------------------------------------------------------
+            ' If the entry the Objects Listfile is .xml, Performing INFA Checks
+            '------------------------------------------------------------------'''
+            Comments_File_path = ""
+            if Object_Nm.find(".xml") > 0 :
+                import CA_CHECK_NONEXISTENCE
+                import CA_INFA_CHECK_DC_1_4
+                import CA_INFA_CHECK_DC_1_5
+                import CA_INFA_CHECK_DC_1_7
+                import CA_INFA_CHECK_DC_1_8
+                import CA_INFA_CHECK_AGG_SORT
+                import CA_INFA_CHECK_JOINER_SORT
+                import CA_INFA_CHECK_FEXP_TPT_READER
+                import CA_INFA_CHECK_PFC_2_2
+                import CA_INFA_CHECK_PFC_2_5_2_6
+                import CA_INFA_CHECK_PFC_2_10
+                import CA_INFA_CHECK_PFC_2_11
+                import CA_INFA_CHECK_WMC_3_1
+                import CA_INFA_CHECK_WMC_3_3
+                import CA_INFA_CHECK_WMC_3_4
+                import CA_INFA_CHECK_WMC_3_5
+                import CA_INFA_CHECK_WMC_3_6
+                import CA_INFA_CHECK_WMC_3_7
+                import CA_INFA_CHECK_WMC_3_8
+                import CA_INFA_CHECK_WMC_3_11
+                import CA_INFA_CHECK_WMC_3_15
+                import CA_INFA_CHECK_WMC_3_16
+                import CA_INFA_CHECK_WMC_3_17
+                import CA_INFA_CHECK_WMC_3_18
+                import CA_INFA_CHECK_WMC_3_23
+                import CA_INFA_CHECK_WMC_3_24
+                import CA_INFA_CHECK_WMC_3_25
+                import CA_INFA_CHECK_WMC_3_27
+                import CA_INFA_CHECK_WMC_3_28
+                import CA_INFA_CHECK_WMC_3_33
+                import CA_INFA_CHECK_WMC_3_34
+                import CA_INFA_CHECK_WMC_3_39
+                import CA_INFA_CHECK_WMC_3_41
+                import CA_INFA_CHECK_WMC_3_44
+                import CA_INFA_CHECK_WMC_3_45
+                import CA_INFA_CHECK_WMC_3_46
+                import CA_INFA_CHECK_WMC_3_56
+                import CA_INFA_CHECK_WMC_3_58
+                import CA_INFA_CHECK_INTEGRATION_SERVICE
+                import CA_INFA_CHECK_CONFIG_4_5
+                import CA_INFA_CHECK_CONFIG_4_6
+                
+                Script_Name = "CA_CHECK_NONEXISTENCE.py"
+                nonexistFile = r"\\Va10dwvcat300\cadept$\SELF_CA_HIDE\Python\FCAT\NonExistence.parm"
+                logfile_format1(Script_Name)
+                rc = CA_CHECK_NONEXISTENCE.NONEXISTENCE_INFA(Script_Name,nonexistFile,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_DC_1_4.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_DC_1_4.DC_1_4(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_DC_1_5.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_DC_1_5.DC_1_5(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_DC_1_7.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_DC_1_7.DC_1_7(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_DC_1_8.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_DC_1_8.DC_1_8(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_AGG_SORT.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_AGG_SORT.AGG_SORT(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_JOINER_SORT.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_JOINER_SORT.JOINER_SORT(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_FEXP_TPT_READER.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_FEXP_TPT_READER.FEXP_TPT_READER(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_PFC_2_2.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_PFC_2_2.PFC_2_2(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_PFC_2_5_2_6.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_PFC_2_5_2_6.PFC_2_5_2_6(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_PFC_2_10.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_PFC_2_10.PFC_2_10(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_PFC_2_11.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_PFC_2_11.PFC_2_11(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_1.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_1.WMC_3_1(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_3.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_3.WMC_3_3(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_4.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_4.WMC_3_4(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_5.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_5.WMC_3_5(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_6.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_6.WMC_3_6(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_7.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_7.WMC_3_7(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_8.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_8.WMC_3_8(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_11.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_11.WMC_3_11(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_15.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_15.WMC_3_15(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_16.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_16.WMC_3_16(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_17.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_17.WMC_3_17(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_18.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_18.WMC_3_18(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_23.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_23.WMC_3_23(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_24.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_24.WMC_3_24(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_25.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_25.WMC_3_25(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_27.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_27.WMC_3_27(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_28.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_28.WMC_3_28(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_33.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_33.WMC_3_33(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_34.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_34.WMC_3_34(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_39.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_39.WMC_3_39(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_41.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_41.WMC_3_41(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_44.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_44.WMC_3_44(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_45.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_45.WMC_3_45(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_46.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_46.WMC_3_46(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_56.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_56.WMC_3_56(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_WMC_3_58.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_WMC_3_58.WMC_3_58(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_INTEGRATION_SERVICE.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_INTEGRATION_SERVICE.INTEGRATION_SERVICE(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_CONFIG_4_5.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_CONFIG_4_5.CONFIG_4_5(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+                Script_Name = "CA_INFA_CHECK_CONFIG_4_6.py"
+                logfile_format1(Script_Name)
+                rc = CA_INFA_CHECK_CONFIG_4_6.CONFIG_4_6(Script_Name,Object1,LogFile_Name)
+                logfile_format2(rc,Script_Name)
+    #        '''------------------------------------------------------------------
+    #        ' If the entry the Objects Listfile is .sh, Performing BTEQ Checks
+    #        '------------------------------------------------------------------'''
+            elif Object_Nm.find(".sh") > 0 or Object_Nm.find(".ksh") > 0 :
+                Comments_File_path = CAPATH+"\ICRF_BTEQ_D\\"+TimeStamp
+                if os.path.isdir(Comments_File_path) == False :
+                    os.mkdir(Comments_File_path)
+                Comments_File = Comments_File_path+"\\"+Object_Name+"_wc.sh"
+                Unix_File = Comments_File_path+"\\"+Object_Name+"_Unix_Code.sh"
+                import CA_COMMENTS_REMOVAL
+                import CA_CHECK_NONEXISTENCE
+                import CA_BTEQ_CHECK_CC_1_2
+                import CA_BTEQ_CHECK_CC_1_4
+                import CA_BTEQ_CHECK_CC_1_9
+                import CA_BTEQ_CHECK_CC_1_10
+                import CA_BTEQ_CHECK_DUP_ERROR
+                import CA_BTEQ_CHECK_DUP_SETWIDTH
+                import CA_BTEQ_CHECK_XM_SERVER
+                import CA_BTEQ_CHECK_GTT_2_1
+                import CA_BTEQ_CHECK_PP_PF_5_3
+                import CA_BTEQ_CHECK_PP_PF_5_4
+                import CA_BTEQ_CHECK_UPN_6_1
+                import CA_BTEQ_CHECK_UPN_6_3
+                import CA_BTEQ_CHECK_CS_7_1_7_2
+                import CA_BTEQ_CHECK_CS_7_7
+                import CA_BTEQ_CHECK_CU_10_6
+                import CA_BTEQ_CHECK_APP_SET_QUERY
+                import CA_BTEQ_CHECK_CAST_ON_DTM
+                import CA_BTEQ_CHECK_INS_AUDT_STTSTC
+                import CA_BTEQ_CHECK_VOLATILE_TABLES
+                import CA_BTEQ_CHECK_DRIVER_TABLES
+                import CA_BTEQ_CHECK_RETURNCODE
+                import CA_BTEQ_DB_OBJECT_EXISTENCE
+                import CA_BTEQ_CHECK_SINGLE_COMMENT
+                import CA_BTEQ_CHECK_BLOCK_COMPRESSION
+                import CA_BTEQ_CHECK_DIAGNOSTIC
+                import CA_BTEQ_CHECK_QUALIFIED
+                import CA_BTEQ_CHECK_STATS_COLUMN_SPACES
+                import CA_BTEQ_CHECK_FIND_PROB_QUERY
+                import CA_BTEQ_CHECK_INVALID_STATS_CALLS
+                import CA_BTEQ_CHECK_VOLATILE_STATS
+                import CA_BTEQ_CHECK_TVS_QUERYBAND
+                import CA_BTEQ_CHECK_IN_LIST
+                import CA_BTEQ_CHECK_UPDATE_ON_PI
+                import CA_BTEQ_CHECK_VERIFY_SCRIPT_NAME
+                import CA_BTEQ_STATS_NOT_DEFINED
+                import CA_BTEQ_CHECK_DELETE_ON_AUDIT_RULE
+                import CA_BTEQ_CHECK_NO_STATS_ON_DOLLARN
+                import CA_BTEQ_CHECK_DERIVED_TABLES
+                import CA_DBA_PROCESS
+    
+                Script_Name = "CA_COMMENTS_REMOVAL.py"
+                DBA_Generic_File = r"\\Va10dwvcat300\cadept$\SELF_CA_HIDE\Python\FCAT\DBA_Generic_Values.lst"
+                logfile_format1(Script_Name)
+                rc = CA_COMMENTS_REMOVAL.COMMENTS_REMOVAL(Script_Name,Object1,DBA_Generic_File,Comments_File,Unix_File,Parm_name,mail_id,LogFile_Name)
+                if rc == 101:
+                    continue_flag = True
+                    #os.removedirs(Comments_File_path)
+                    #sys.exit("Parm Variable not found")
+                logfile_format2(rc,Script_Name)
+                if continue_flag == False:
+                    Script_Name = "CA_CHECK_NONEXISTENCE.py"
+                    nonexistFile = r"\\Va10dwvcat300\cadept$\SELF_CA_HIDE\Python\FCAT\NonExistence.parm"
+                    logfile_format1(Script_Name)
+                    rc = CA_CHECK_NONEXISTENCE.NONEXISTENCE_UNIX(Script_Name,nonexistFile,Comments_File,Unix_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_CC_1_2.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_CC_1_2.CC_1_2(Script_Name,Object1,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_CC_1_4.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_CC_1_4.CC_1_4(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_CC_1_9.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_CC_1_9.CC_1_9(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_CC_1_10.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_CC_1_10.CC_1_10(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_DUP_ERROR.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_DUP_ERROR.DUP_ERROR(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_DUP_SETWIDTH.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_DUP_SETWIDTH.DUP_SETWIDTH(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_XM_SERVER.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_XM_SERVER.XM_SERVER(Script_Name,Comments_File,LogFile_Name,Target_Environment)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_GTT_2_1.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_GTT_2_1.GTT_2_1(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_PP_PF_5_3.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_PP_PF_5_3.PP_PF_5_3(Script_Name,Unix_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_PP_PF_5_4.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_PP_PF_5_4.PP_PF_5_4(Script_Name,Unix_File,Parm_name,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_UPN_6_1.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_UPN_6_1.UPN_6_1(Script_Name,Unix_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_UPN_6_3.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_UPN_6_3.UPN_6_3(Script_Name,Object1,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    statslistfile = r"\\Va10dwvcat300\cadept$\SELF_CA_HIDE\Python\FCAT\DBA_STATS.lst"
+                    Script_Name = "CA_BTEQ_CHECK_CS_7_1_7_2.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_CS_7_1_7_2.CS_7_1_7_2(Script_Name,statslistfile,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_CS_7_7.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_CS_7_7.CS_7_7(Script_Name,statslistfile,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_CU_10_6.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_CU_10_6.CU_10_6(Script_Name,Unix_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_APP_SET_QUERY.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_APP_SET_QUERY.APP_SET_QUERY(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_CAST_ON_DTM.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_CAST_ON_DTM.CAST_ON_DTM(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_INS_AUDT_STTSTC.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_INS_AUDT_STTSTC.INS_AUDT_STTSTC(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_VOLATILE_TABLES.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_VOLATILE_TABLES.VOLATILE_TABLES(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_DRIVER_TABLES.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_DRIVER_TABLES.DRIVER_TABLES(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_RETURNCODE.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_RETURNCODE.RETURNCODE(Script_Name,Unix_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_DB_OBJECT_EXISTENCE.py"
+                    tdserverslistfile = r"\\Va10dwvcat300\cadept$\SELF_CA_HIDE\Python\FCAT\TD_Servers.lst"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_DB_OBJECT_EXISTENCE.DB_OBJECT_EXISTENCE(Script_Name,Comments_File,tdserverslistfile,TD_Server,CAPATH,mail_id,ICRF_Name,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_SINGLE_COMMENT.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_SINGLE_COMMENT.SINGLE_COMMENT(Script_Name,Object1,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_BLOCK_COMPRESSION.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_BLOCK_COMPRESSION.BLOCK_COMPRESSION(Script_Name,Comments_File,Parm_name,CAPATH,mail_id,ICRF_Name,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_DIAGNOSTIC.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_DIAGNOSTIC.DIAGNOSTIC(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_QUALIFIED.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_QUALIFIED.QUALIFIED(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_STATS_COLUMN_SPACES.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_STATS_COLUMN_SPACES.STATS_COLUMN_SPACES(Script_Name,statslistfile,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_FIND_PROB_QUERY.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_FIND_PROB_QUERY.FIND_PROB_QUERY(Script_Name,tdserverslistfile,Object1,TD_Server,CAPATH,mail_id,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_INVALID_STATS_CALLS.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_INVALID_STATS_CALLS.INVALID_STATS_CALLS(Script_Name,statslistfile,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_VOLATILE_STATS.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_VOLATILE_STATS.VOLATILE_STATS(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_TVS_QUERYBAND.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_TVS_QUERYBAND.TVS_QUERYBAND(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_IN_LIST.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_IN_LIST.IN_LIST(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_UPDATE_ON_PI.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_UPDATE_ON_PI.UPDATE_ON_PI(Script_Name,tdserverslistfile,Comments_File,TD_Server,CAPATH,mail_id,ICRF_Name,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_VERIFY_SCRIPT_NAME.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_VERIFY_SCRIPT_NAME.VERIFY_SCRIPT_NAME(Script_Name,Object1,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_STATS_NOT_DEFINED.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_STATS_NOT_DEFINED.STATS_NOT_DEFINED(Script_Name,tdserverslistfile,Comments_File,TD_Server,CAPATH,mail_id,ICRF_Name,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_DELETE_ON_AUDIT_RULE.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_DELETE_ON_AUDIT_RULE.DELETE_ON_AUDIT_RULE(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_NO_STATS_ON_DOLLARN.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_NO_STATS_ON_DOLLARN.NO_STATS_ON_DOLLARN(Script_Name,statslistfile,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_BTEQ_CHECK_DERIVED_TABLES.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_BTEQ_CHECK_DERIVED_TABLES.DERIVED_TABLES(Script_Name,Comments_File,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+                    Script_Name = "CA_DBA_PROCESS.py"
+                    logfile_format1(Script_Name)
+                    rc = CA_DBA_PROCESS.DBA_PROCESS(Script_Name,Comments_File,DBA_Generic_File,tdserverslistfile,TD_Server,CAPATH,mail_id,ICRF_Name,LogFile_Name)
+                    logfile_format2(rc,Script_Name)
+            
+    #        '------------------------------------------------------------------------------------------------------
+    #        '  Storing Log file names into arrays
+    #        '------------------------------------------------------------------------------------------------------
+            LOGArray.append(LogFile_Name)
+    #        '------------------------------------------------------------------------------------------------------
+    #        '  Formatting Log file Content
+    #        '------------------------------------------------------------------------------------------------------
+            with open(LogFile_Name, 'r') as ObjLogFile:
+                LOG_Content = ObjLogFile.readlines()
+            Idx = 0
+            newlog_content = []
+            while Idx < len(LOG_Content):
+                CurrentLine = LOG_Content[Idx]
+                Next_First_Line = LOG_Content[Idx+1][:3]
+                Next_Second_Line = LOG_Content[Idx+2][:3]
+                if CurrentLine.find(".py") != -1 and Next_First_Line == "---" and Next_Second_Line == "===":
+                    Idx = Idx + 3
+                elif CurrentLine.find(".py") != -1 and Next_First_Line == "---" and Next_Second_Line != "===":
+                    Idx1 = Idx + 3
+                    newlog_content.append(LOG_Content[Idx])
+                    newlog_content.append(LOG_Content[Idx+1])
+                    newlog_content.append(LOG_Content[Idx+2])
+                    while Idx1 < len(LOG_Content):
+            
+                        if LOG_Content[Idx1][:3] != "===":
+                            newlog_content.append(LOG_Content[Idx1])
+                        else:
+                            newlog_content.append(LOG_Content[Idx1])
+                            Idx1 = Idx1 + 1
+                            break
+                        Idx1 = Idx1 + 1
+                    Idx = Idx1
+            with open(LogFile_Name, 'w') as ObjLogFile:
+                for LogFileIdx in range(len(newlog_content)):
+                    ObjLogFile.write(newlog_content[LogFileIdx])
+            newlog_content = []
+            if os.stat(LogFile_Name).st_size == 0 :
+                ObjLogFile = open(LogFile_Name, 'a')
+                ObjLogFile.write("There are no code review issues found for the given script.\n")
+                No_Errors_Arr.append(Object_Name1)
+                ObjLogFile.close()
+            if os.stat(LogFile_Name).st_size > 0 :
+                with open(LogFile_Name, 'r') as ObjLogFile:
+                    LogFile_Name_Arr = ObjLogFile.readlines()
+                ObjConsLogFile = open(Consolidated_Log, 'a')
+                if Consol_Head_Flag == False :
+                    if Consolidated_Log.rfind("\\") > 0 :
+                        Consolidate_Name = Consolidated_Log[Consolidated_Log.rfind("\\")+1:Consolidated_Log.rfind(".")]
+                    ObjConsLogFile.write("**************************************************************************************************************\n")
+                    ObjConsLogFile.write("\tCODE ASSESSMENT CONSOLIDATED REPORT: "+Consolidate_Name+'\n')
+                    ObjConsLogFile.write("**************************************************************************************************************\n")
+                    Consol_Head_Flag = True
+                    if Form_type == "BTEQ" :
+                        ObjDBAConsLogFile = open(DBA_Consolidated_Log, 'a')
+                        ObjDBAConsLogFile.write("**************************************************************************************************************\n")
+                        ObjDBAConsLogFile.write("\tTERADATA CODE REVIEW CONSOLIDATED REPORT: "+Consolidate_Name+'\n')
+                        ObjDBAConsLogFile.write("**************************************************************************************************************\n")
+                        ObjDBAConsLogFile.close()
+                        Consol_Head_Flag = True
+                ObjConsLogFile.write("#########################"+'\t'+Object_Name1+'\t'"#########################\n")
+                ObjConsLogFile.write('\n')
+                if DBA_Consol_Head_Flag == False and Form_type == "BTEQ" :
+                    ObjDBAConsLogFile = open(DBA_Consolidated_Log, 'a')
+                    ObjDBAConsLogFile.write("#########################\t"+Object_Name1+"\t#########################\n")
+                    prev_Object_Name1 = Object_Name1
+                    ObjDBAConsLogFile.write('\n')
+                    ObjDBAConsLogFile.close()
+                    DBA_Consol_Head_Flag = True 
+                if Form_type == "BTEQ" :
+                    cons_flag = False
+                    CIdx = 0
+                    while CIdx < len(LogFile_Name_Arr):
+                        strChar = LogFile_Name_Arr[CIdx]
+                        temp_strchar = strChar.replace('\t',"").strip()
+                        if temp_strchar.find("CA_DBA_PROCESS.py")+1 > 0 and DBA_CONS_1stObj_Name == True and cons_flag == False :
+                            #CIdx = CIdx + 5
+                            strChar = LogFile_Name_Arr[CIdx]
+                            ObjDBAConsLogFile = open(DBA_Consolidated_Log, 'a')
+                            cons_flag = True
+                        elif temp_strchar.find("CA_DBA_PROCESS.py")+1 > 0: 
+                            ObjDBAConsLogFile = open(DBA_Consolidated_Log, 'a')
+                            DBA_CONS_1stObj_Name = True
+                            cons_flag = True
+                        if cons_flag == False :
+                            ObjConsLogFile.write(strChar)
+                        elif cons_flag == True :
+                            ObjDBAConsLogFile.write(strChar)
+                        #prev_strchar = temp_strchar
+                        CIdx = CIdx + 1
+                    if cons_flag == False :
+                        ObjDBAConsLogFile = open(DBA_Consolidated_Log, 'a')
+                        ObjDBAConsLogFile.write("There are no Teradata code review issues found for the given script.\n")
+                    ObjConsLogFile.write('\n')
+                    ObjDBAConsLogFile.write('\n')
+                    ObjDBAConsLogFile.close()
+                else:
+                    for i in range(len(LogFile_Name_Arr)):
+                        strChar = LogFile_Name_Arr[i]
+                        ObjConsLogFile.write(strChar)
+                ObjConsLogFile.write('\n')
+                ObjConsLogFile.close()
+                ObjLogFile.close()
+    
+            DBA_Consol_Head_Flag = False
+            #LIdx = LIdx + 1
+    if os.path.isdir(Comments_File_path) == True:
+        try:
+            shutil.rmtree(Comments_File_path)
+        except Exception:
+            pass
+    #'----------------------------------------------------------------------------------------------
+    #' Count Errors messages in Consolidated log and if size is zero write message
+    #'----------------------------------------------------------------------------------------------
+    Errors = 0
+    with open(Consolidated_Log, 'r') as ObjConsLogFile :
+        Consolidated_Log_Arr = ObjConsLogFile.readlines()
+    for strchar in Consolidated_Log_Arr:
+        strchar = strchar.strip()
+        if strchar[0:6] == "ERROR:" :
+            Errors = Errors + 1
+    #'----------------------------------------------------------------------------------------------
+    #' Count Errors messages in DBA Consolidated log and if size is zero write message
+    #'----------------------------------------------------------------------------------------------
+    DBA_Process_Results_Err = 0
+    DBA_Process_Results_War = 0
+    if Form_type == "BTEQ" :
+        with open(DBA_Consolidated_Log, 'r') as ObjDBAConsLogFile:
+            DBA_Consolidated_Log_Arr = ObjDBAConsLogFile.readlines()
+        for strchar in DBA_Consolidated_Log_Arr:
+            strchar = strchar.strip()
+            if strchar[0:6] == "ERROR:" :
+                DBA_Process_Results_Err = DBA_Process_Results_Err + 1
+            
+    #'----------------------------------------------------------------------------------------------
+    #' Remove .done files
+    #'----------------------------------------------------------------------------------------------
+    for Object in Object_Nm_Arr:
+        if Object.find(".xml" ) > 0 :
+            Objects_Array = Object.split("|")        
+            Object_Name = Objects_Array[0][:Objects_Array[0].rfind(".")]
+        elif Object.find(".sh") > 0 or Object.find(".ksh") > 0 :
+            Objects_Array = Object.split("|")
+            if len(Objects_Array) == 4 :
+                Object_Name = Objects_Array[0][0:Objects_Array[0].find(".")]
+        if Object_Name.find("\\") > 0 :
+            ObjArray = Object_Name.find("\\")
+            Obj_Name1 = ""
+            if len(Obj_Name1) == 0 :
+                Obj_Name1 = ObjArray[i]
+            else:
+                Obj_Name1 = Obj_Name1 +"_"+ObjArray[i]
+            Object_Name = Obj_Name1
+    '''-------------------------------------------------------------------------------
+    'Logic to copy the consolidated Log file into the shared folder <CA_LOGS>
+    '-------------------------------------------------------------------------------'''
+    User_Id = CAPATH[CAPATH.rfind("_")+1:]
+    User_Id_Folder = r"\\Va10dwvcat300\cadept$\Files\CA_LOGS\FCAT_LOGS\\"+User_Id
+    if os.path.isdir(User_Id_Folder) == False :
+        os.mkdir(User_Id_Folder)
+    if os.path.isfile(Consolidated_Log) == True : 
+        Source_Location = Consolidated_Log
+        Unique_Id_Folder = r"\\Va10dwvcat300\cadept$\Files\CA_LOGS\FCAT_LOGS\\"+User_Id+"\\"+Unique_Identifier_Info
+        if os.path.isdir(Unique_Id_Folder) == False :
+            os.mkdir(Unique_Id_Folder)
+        Target_Location = Unique_Id_Folder+"\\"
+        shutil.copy(Source_Location,Target_Location)
+    if os.path.isfile(DBA_Consolidated_Log) == True : 
+        Source_Location_DBA = DBA_Consolidated_Log
+        Unique_Id_Folder = r"\\Va10dwvcat300\cadept$\Files\CA_LOGS\FCAT_LOGS\\"+User_Id+"\\"+Unique_Identifier_Info
+        if os.path.isdir(Unique_Id_Folder) == False :
+            os.mkdir(Unique_Id_Folder)
+        Target_Location = Unique_Id_Folder+"\\"
+        shutil.copy(Source_Location_DBA,Target_Location)
+    '''----------------------------------------------------------------------------------------------
+    ' Backup the BTEQ's
+    '----------------------------------------------------------------------------------------------'''
+    Sh_count = 0
+    Xml_count = 0
+    Log_count = 0
+    Work_Order_No = ICRF_Name
+    IM_IMP_Date = IMP_Date
+    EXCEPTION_APPROVALl = "NA"
+    ASSESSMENT_TYPE = "FCAT"
+    if IM_IMP_Date.find("/") > 0:
+        Str_IMdate = IM_IMP_Date.split("/")
+        if len(Str_IMdate[2]) == 4 :
+            if len(Str_IMdate[1]) == 1 :
+                Dat="0"+Str_IMdate[1]
+            else:
+                Dat=Str_IMdate[1]
+            if len(Str_IMdate[0]) == 1 :
+                Mnt="0"+Str_IMdate[0]
+            else:
+                Mnt=Str_IMdate[0]
+            if int(Mnt) > 12 :
+                IM_IMP_Date="8888-12-31"
+            elif int(Mnt) <= 12 :
+                IM_IMP_Date = Str_IMdate[2]+"-"+str(Mnt)+"-"+str(Dat)
+            elif int(Dat) <= 12 :
+                IM_IMP_Date = Str_IMdate[2]+"-"+str(Mnt)+"-"+str(Dat)
+        else:
+            IM_IMP_Date="8888-12-31"
+    else:
+        IM_IMP_Date="8888-12-31"
+    
+    for Object in Object_Nm_Arr:
+        if Object.find(".xml" ) > 0 :
+            Objects_Array = Object.split("|")        
+            Obj_N = Objects_Array[0]
+            Object_Name = Objects_Array[0][:Objects_Array[0].rfind(".")]
+        elif Object.find(".sh") > 0 or Object.find(".ksh") > 0 :
+            Objects_Array = Object.split("|")
+            if len(Objects_Array) == 5 :
+                Obj_N = Objects_Array[0]
+                Object_Name = Objects_Array[0][0:Objects_Array[0].find(".")]
+            Parm_Nm = Objects_Array[1][Objects_Array[1].rfind("\\")+2:]
+            if os.path.isfile(Unique_Id_Folder+"\\"+Parm_Nm) == False :
+                Target_Location = Unique_Id_Folder+"\\"
+                shutil.copy(Objects_Array[1],Target_Location)
+        if Object.find(".sh") > 0 :
+            #os.rename(Obj_N, Object_Name+"_"+TimeStamp+".sh")
+            Sh_count = Sh_count + 1
+        elif Object.find(".ksh") > 0 :
+            os.rename(Obj_N, Object_Name+"_"+TimeStamp+".ksh")
+            Sh_count = Sh_count + 1
+        elif Object.find(".xml" ) > 0 :
+            os.rename(Obj_N, Object_Name+"_"+TimeStamp+".xml")
+            Xml_count = Xml_count + 1
+    Errors_Total = Errors + DBA_Process_Results_Err
+    
+    '''-----------------------------------------------------------------
+    'Logic to decide the migration process.
+    '------------------------------------------------------------------'''
+    obj_cnt = 0
+    Target_Environment_Tmp = Target_Environment
+    Target_Environment_Path = r"\\va10dwvcat300\cadept$\Files\Staging"
+    if Form_type == "BTEQ" :
+        Target_Env_Location = Target_Environment_Path+"\\"+Target_Environment_Tmp+"\\UNIX"
+        obj_cnt = Sh_count
+    elif Form_type == "INFA" :
+        Target_Env_Location = Target_Environment_Path+"\\"+Target_Environment_Tmp+"\\INFA"
+        obj_cnt = Xml_count
+    '''-----------------------------------------------------------------
+    'Logic to write the unique identifier in ICRF form
+    '------------------------------------------------------------------'''
+    #shutil.copy(ICRF_FileName, CAPATH+"\ICRF_FORMS_BKP_D\\"+ICRF_Name+"_"+TimeStamp+".csv")
+    Upd_Line = ""
+    with open(ICRF_FileName,'r') as objICRFFile:
+        ICRF_Content = objICRFFile.readlines()
+    with open(ICRF_FileName, 'w') as Obj_ICRF:
+        for Id in range(len(ICRF_Content)):
+            Form_Line = ICRF_Content[Id]
+            if Id == 1 : 
+                Line_Cnt = Form_Line.split(",")
+                for j in range(len(Line_Cnt)):
+                    if j == 48 :
+                        Upd_Line = Upd_Line+","+Unique_Identifier_Info
+                    elif j == 0 :
+                        Upd_Line = Line_Cnt[j]
+                    else:
+                        Upd_Line = Upd_Line+","+Line_Cnt[j]
+                Obj_ICRF.write(Upd_Line+"\n")
+                Upd_Line = ""
+            else:
+                Obj_ICRF.write(Form_Line)
+    #if len(FCAT_Type_Variable) == 0 : 
+    #    End_Process(ICRF_FileName)
+    
+    Metrics_Data = CAPATH+"\ICRF_BTEQ_TMP_D\\"+ICRF_Name+"_Metrics_Data_"+TimeStamp+".txt"
+    Metrics_Data_File = open(Metrics_Data, 'w')
+    Mig_Base_Flag = False
+    Form_Exist = False
+    Mig_Excp_Flag = False
+    if Errors_Total > 0 :
+        '''----------------------------------------------------------------------------------------------
+        'Metrics Process variables declaration
+        '----------------------------------------------------------------------------------------------'''
+        ScriptOrXml_Name, Code_Count,Check_Name_M = '',0,''
+        '''---------------------------------------------------------------------------------------------------
+        ' Logic to read the Check_Errorcode_List.lst file for Errorcodes
+        '---------------------------------------------------------------------------------------------------'''
+        
+        LIdx = 0
+        LOGIdx = 0
+        Check_Codes_Arr = []
+        Check_Codes_File = List_Path+"\Check_Errorcode_List.lst"
+        with open(Check_Codes_File, 'r') as Obj_Code_File:
+            Check_Code_Str_Arr = Obj_Code_File.readlines()
+        for Check_Code_Str in Check_Code_Str_Arr:
+            Check_Code_Str = Check_Code_Str.strip()
+            if Check_Code_Str.find("DBQL CHECKS")+1 > 0 :
+                break
+            elif Check_Code_Str.find("####") == -1 :
+                Check_Codes_Arr.append(Check_Code_Str)
+                LIdx = LIdx + 1 
+        '''---------------------------------------------------------------------------------------------------
+        ' Logic to read the Consolidated log file
+        '---------------------------------------------------------------------------------------------------'''
+        with open(Consolidated_Log, 'r') as ObjLogFile:
+            LOG_Content_Metrics = ObjLogFile.readlines()
+        Log_length = len(LOG_Content_Metrics)
+        Idx = 1
+        CCid = 0
+        Midx = -1
+        TD_Code_Count = 0
+        TD_Msg = "TERADATA CODE REVIEW PROCESS not performed"
+        Check_Found = False
+        Error_Code_Arr = [[0 for x in range(int(100))] for y in range(int(obj_cnt+2))]
+        Error_Occr_Arr = [[0 for x in range(int(100))] for y in range(int(obj_cnt+2))]
+        Check_Track_Arr,BTEQ_or_XML_Arr = [0]*int(100),['']*int(obj_cnt+2)
+        for Idx in range(Log_length):
+            Temp_Log_Str = LOG_Content_Metrics[Idx].strip()
+            if Temp_Log_Str[:8] == "########" and (Temp_Log_Str.find(".sh") > 0 or Temp_Log_Str.find(".ksh") > 0 or Temp_Log_Str.find(".xml") > 0 ) :
+                Pos1 = Temp_Log_Str.find("\t")+1
+                Pos2 = Temp_Log_Str.rfind("\t")
+                ScriptOrXml_Name = Temp_Log_Str[Pos1:Pos2]
+                ScriptOrXml_Name = ScriptOrXml_Name.strip()
+                if ScriptOrXml_Name.rfind("_APID") > 0 : 
+                    APID_Consol_Temp = ScriptOrXml_Name[ScriptOrXml_Name.rfind("_"):len(ScriptOrXml_Name)]
+                    if APID_Consol_Temp.rfind("_APID")+1 > 0 : 
+                        if ScriptOrXml_Name[-3:] == ".sh" :
+                            ScriptOrXml_Name = ScriptOrXml_Name[:ScriptOrXml_Name.rfind("_APID")]+".sh"
+                        elif ScriptOrXml_Name[-4:] == ".ksh" :
+                            ScriptOrXml_Name = ScriptOrXml_Name[:ScriptOrXml_Name.rfind("_APID")]+".ksh"
+                        APID_Consol_Temp = ""
+                if TD_Code_Count > 0 :
+                    Error_Code_Arr[Midx][CCid] = "4016"
+                    Error_Occr_Arr[Midx][CCid] = TD_Code_Count
+                    CCid = CCid + 1
+                TD_Code_Count = 0
+                Midx = Midx + 1
+                BTEQ_or_XML_Arr[Midx] = ScriptOrXml_Name
+                Check_Track_Arr[Midx] = CCid
+                CCid = 0
+            elif (Temp_Log_Str.find("CA_COMMENTS") + 1 > 0 or Temp_Log_Str.find("CA_CHECK") + 1 > 0 or Temp_Log_Str.find("CA_INFA") + 1 > 0 or Temp_Log_Str.find("CA_BTEQ") + 1 > 0 ) and Temp_Log_Str.find(".py") > 0 :
+                Check_Name_M = Temp_Log_Str.strip()
+                if Check_Name_M.find("===>") > 0 :
+                    Check_Name_M = Check_Name_M[0:Check_Name_M.find("===>")].strip()
+                Code_Found = False
+                for i in range(len(Check_Codes_Arr)):
+                    Temp_Code = Check_Codes_Arr[i].strip()
+                    if Temp_Code.find(",") > 0 :
+                        Code_Info = Temp_Code.split(",")
+                        Check_Name_Info = Code_Info[0].strip()
+                        Check_Code_Info = Code_Info[1].strip()
+                        if Check_Name_M.upper() == Check_Name_Info.upper() :
+                            Error_Code_Arr[Midx][CCid] = Check_Code_Info
+                            Code_Found = True
+                            break
+            elif Temp_Log_Str[:5] == "ERROR" and Code_Found == True and Temp_Log_Str.find(TD_Msg) == -1 :
+                Check_Found = True
+                Code_Count = Code_Count + 1
+            elif Temp_Log_Str[:5] == "=====" and Check_Found == True :
+                Error_Occr_Arr[Midx][CCid] = Code_Count
+                CCid = CCid + 1
+                Check_Found = False
+                Code_Found = False
+                Code_Count = 0
+            elif Temp_Log_Str.upper().find(TD_Msg.upper())+1 > 0 :
+                TD_Code_Count = TD_Code_Count + 1
+            if CCid > 0 :
+                Check_Track_Arr[Midx] = CCid
+            Idx = Idx + 1
+        if TD_Code_Count > 0 :
+            Error_Code_Arr[Midx][CCid] = "4016"
+            Error_Occr_Arr[Midx][CCid] = TD_Code_Count
+            CCid = CCid + 1
+        Check_Track_Arr[Midx] = CCid
+        Midx = Midx + 1
+        '''-----------------------------------------------------------------
+        'Create a data file to load the metrics details
+        '------------------------------------------------------------------'''
+        Problem_query_flag = "False"
+        Con_Log_Array = []
+        for j in  range(Midx):
+            Problem_query_flag = "False"
+            Total_Err = 0
+            CCid = Check_Track_Arr[j]
+            for k in range(int(CCid)):      
+                if Error_Occr_Arr[j][k] > 0 and len(Error_Code_Arr[j][k].strip()) > 0 :
+                    if Error_Code_Arr[j][k] == "1033" or Error_Code_Arr[j][k] == "101":
+                        Problem_query_flag = "True"
+                    Metrics_Data_File.write(Unique_Identifier_Info+"|"+BTEQ_or_XML_Arr[j]+"|"+Error_Code_Arr[j][k]+"|"+str(Error_Occr_Arr[j][k])+'\n')
+                Total_Err = Total_Err + Error_Occr_Arr[j][k]
+            Con_Log_Array.append(BTEQ_or_XML_Arr[j]+"|"+str(Total_Err)+"|"+Problem_query_flag)
+        Metrics_Data_File.close()
+        '''---------------------------------------------------------------------------------------------------
+        ' Logic to read the DBA Consolidated log file
+        '---------------------------------------------------------------------------------------------------'''
+        Metrics_Data_File = open(Metrics_Data, 'a')
+        if Form_type == "BTEQ" :
+            Error_Code_Arr_DBA = [[0 for x in range(int(100))] for y in range(int(obj_cnt+2))]
+            Error_Occr_Arr_DBA = [[0 for x in range(int(100))] for y in range(int(obj_cnt+2))]
+            Check_Track_Arr_DBA,BTEQ_or_XML_Arr_DBA,Process_Flag = [0]*int(100),['']*int(obj_cnt+2),[]
+
+            with open(DBA_Consolidated_Log, 'r') as ObjLogFile:
+                LOG_Content_DBA = ObjLogFile.readlines()
+            Log_length = len(LOG_Content_DBA) 
+            Idx = 0
+            CCid = 0
+            Midx = -1
+            TD_Code_Count = 0
+            TD_Msg = "TERADATA CODE REVIEW PROCESS NOT PERFORMED"
+            Script_Flag = False
+            Check_Found = False
+            No_Issue_Flag = False
+            while Idx < Log_length:
+                Temp_Log_Str = LOG_Content_DBA[Idx]
+                if Temp_Log_Str[0:8] == "########" and Temp_Log_Str.find("###---") == -1 :
+                    Pos1 = Temp_Log_Str.find('\t')
+                    Pos2 = Temp_Log_Str.rfind('\t')
+                    ScriptOrXml_Name = Temp_Log_Str[Pos1:Pos2]
+                    ScriptOrXml_Name = ScriptOrXml_Name.strip()
+                    if TD_Code_Count > 0 :
+                        Error_Code_Arr_DBA[Midx][CCid] = "4016"
+                        Error_Occr_Arr_DBA[Midx][CCid] = TD_Code_Count
+                        CCid = CCid + 1
+                    TD_Code_Count = 0
+                    Script_Flag = True
+                    Midx = Midx + 1
+                    if ScriptOrXml_Name.rfind("_APID") > 0 : 
+                        APID_Consol_Temp = ScriptOrXml_Name[ScriptOrXml_Name.rfind("_"):len(ScriptOrXml_Name)]
+                        if APID_Consol_Temp.rfind("_APID")+1 > 0 : 
+                            if ScriptOrXml_Name[-3:] == ".sh" :
+                                ScriptOrXml_Name = ScriptOrXml_Name[:ScriptOrXml_Name.rfind("_APID")]+".sh"
+                            elif ScriptOrXml_Name[-4:] == ".ksh" :
+                                ScriptOrXml_Name = ScriptOrXml_Name[:ScriptOrXml_Name.rfind("_APID")]+".ksh"
+                            APID_Consol_Temp = ""
+                    BTEQ_or_XML_Arr_DBA[Midx] = ScriptOrXml_Name
+                    Check_Track_Arr_DBA[Midx] = CCid
+                    CCid = 0
+                    No_Issue_Flag = False
+                elif Script_Flag == True and Temp_Log_Str.find("###---") > 0 and Temp_Log_Str.find("---###") > 0 :
+                    Pos1 = Temp_Log_Str.find("###---")+6
+                    Pos2 = Temp_Log_Str.rfind("---###")
+                    Check_Name = Temp_Log_Str[Pos1:Pos2]
+                    Check_Name = Check_Name.strip()
+                    Code_Count = 0
+                    for i in range(len(Check_Codes_Arr)):
+                        Temp_Code = Check_Codes_Arr[i].strip()
+                        if Temp_Code.find(",") > 0 :
+                            Code_Info = Temp_Code.split(",")
+                            Check_Name_Info = Code_Info[0].strip()
+                            Check_Code_Info = Code_Info[1].strip()
+                            if Check_Name.upper() == Check_Name_Info.upper() :
+                                Code_Count = Code_Count + 1
+                                break
+                    if len(Check_Name_Info) > 0 and len(Check_Code_Info) > 0 :
+                        Temp_Idx = Idx + 1
+                        End_Flag = False
+                        while End_Flag == False:
+                            Log_Str = LOG_Content_DBA[Temp_Idx]
+                            if Log_Str.find("###---") > 0 and Log_Str.find("---###") > 0 :
+                                Pos1 = Log_Str.find("###---")+6
+                                Pos2 = Log_Str.rfind("---###")
+                                Check_Name = Log_Str[Pos1:Pos2]
+                                Check_Name = Check_Name.strip()
+                                if Check_Name.upper() == Check_Name_Info.upper() :
+                                    Code_Count = Code_Count + 1
+                                    LOG_Content_DBA[Temp_Idx] = ""
+                            elif Log_Str[0:5] == "=====" :
+                                End_Flag = True
+                            Temp_Idx = Temp_Idx + 1
+                        if Code_Count > 0 :
+                            Error_Code_Arr_DBA[Midx][CCid] = Check_Code_Info
+                            Error_Occr_Arr_DBA[Midx][CCid] = Code_Count
+                            CCid = CCid + 1
+                        Check_Found = True
+                    Check_Name_Info = ""
+                    Check_Code_Info = ""
+                elif Temp_Log_Str[0:5] == "=====" and Check_Found == True :
+                    Check_Found = False
+                    Script_Flag = False
+                    Code_Count = 0
+                elif Temp_Log_Str.upper().find(TD_Msg)+1 > 0 :
+                    TD_Code_Count = TD_Code_Count + 1
+                elif Temp_Log_Str.strip().lower().find("There are no Teradata code review issues found for the given script.".lower())+1 >  0 :
+                    No_Issue_Flag = True
+                Idx = Idx + 1
+            if TD_Code_Count > 0 :
+                Error_Code_Arr_DBA[Midx][CCid] = "4016"
+                Error_Occr_Arr_DBA[Midx][CCid] = TD_Code_Count
+                CCid = CCid + 1
+            if CCid > 0 :
+                Midx = Midx + 1
+                Check_Track_Arr_DBA[Midx] = CCid
+            elif CCid == 0 and No_Issue_Flag == True :
+                Midx = Midx + 1
+            '''-----------------------------------------------------------------
+            'Create a data file to load the DBA checks metrics details
+            '------------------------------------------------------------------'''
+            Total_Details_Array = []
+            for j in  range(Midx):
+                Total_Err_DBA = 0
+                CCid = Check_Track_Arr_DBA[j+1]
+                con_log = Con_Log_Array[j].split("|") 
+                con_obj_name = con_log[0]
+                con_err = con_log[1].strip()
+                Pb_Qry_flag = con_log[2].strip()
+                for k in range(int(CCid)):
+                    if Error_Occr_Arr_DBA[j][k] > 0 and len(Error_Code_Arr_DBA[j][k].strip()) > 0 :
+                        if Error_Code_Arr_DBA[j][k] == "4016" and Pb_Qry_flag == "False" :
+                            Pb_Qry_flag = "True"
+                        Metrics_Data_File.write(Unique_Identifier_Info+"|"+BTEQ_or_XML_Arr_DBA[j]+"|"+Error_Code_Arr_DBA[j][k]+"|"+str(Error_Occr_Arr_DBA[j][k])+'\n')
+                    Total_Err_DBA = Total_Err_DBA + Error_Occr_Arr_DBA[j][k]
+    #            con_log = Con_Log_Array[j].split("|") 
+    #            con_obj_name = con_log[0].strip()
+    #            con_err = con_log[1].strip()
+                Obj_Total_Err = int(con_err) + int(Total_Err_DBA)
+                Total_Details_Array.append(con_obj_name+"|"+str(Obj_Total_Err)+"|"+Pb_Qry_flag)
+            for i in range(len(Total_Details_Array)):
+                Total_Details_Array[i] = Total_Details_Array[i]+"|"+Tgt_Path_Details_Array[i]
+        else:
+            Total_Details_Array = []
+            for j in range(len(Con_Log_Array)):
+                Total_Details_Array.append(Con_Log_Array[j]+"|"+Tgt_Path_Details_Array[j])
+        Pbm_Qry_Flag = False 
+        Error_Count_Flag = False
+        Metrics_Data_File.close()
+        
+        with open(Metrics_Data, 'r') as Metrics_ExpFile:
+            Metrics_Export_Array = Metrics_ExpFile.readlines()
+        for MEidx in range(len(Metrics_Export_Array)):
+            Metrics_con_log = Metrics_Export_Array[MEidx].split("|")
+            Metrics_Unique_ID = Metrics_con_log[0].strip()
+            Metrics_Obj_name = Metrics_con_log[1].strip()
+            for Tidx in  range(len(Total_Details_Array)):
+                Tot_con_log = Total_Details_Array[Tidx].split("|")
+                Tot_con_name = Tot_con_log[0].strip()
+                Tot_err_count = Tot_con_log[1].strip()
+                Tot_Pb_Qry = Tot_con_log[2].strip()
+                if Metrics_Obj_name.lower() == Tot_con_name.lower() : 
+                    Metrics_Export_Array[MEidx] = Metrics_Export_Array[MEidx].strip()+"|"+str(Tot_err_count)+"|"+Tot_Pb_Qry
+        for Sid in range(len(Summary_Export_Array)):
+            Base_Arry = Summary_Export_Array[Sid].split("|")
+            Base_Obj_Nm = Base_Arry[0].strip()
+            if Base_Obj_Nm.find(".") == -1 :
+                Base_Obj_Nm = Base_Obj_Nm+".xml"
+            if Form_type == "BTEQ" : 
+                Base_Obj_EUI = Base_Arry[3].strip()
+            else:
+                Base_Obj_EUI = Base_Arry[4].strip()
+            for Bsidx in range(len(Total_Details_Array)):
+                Total_Arry = Total_Details_Array[Bsidx].split("|")
+                Total_Obj_Nm = Total_Arry[0].strip()
+                if Base_Obj_Nm.lower() == Total_Obj_Nm.lower() :
+                    Total_Details_Array[Bsidx] = Total_Details_Array[Bsidx]+"|"+Base_Obj_EUI
+        '''------------------------------------------------------------------
+        ' New Objects Details
+        '------------------------------------------------------------------'''
+        New_Obj_Bteq = CAPATH+"\ICRF_BTEQ_TMP_D\\"+ICRF_Name+"_New_Objects_Details_BTEQ_"+TimeStamp+".btq"
+        New_Obj_Bteq_Export_FileName= CAPATH+"\ICRF_BTEQ_LOGS_D\\New_Obj_Export_File_Line"+TimeStamp+".txt"
+        New_Obj_Bteq_File = open(New_Obj_Bteq, 'w')
+        
+        New_Obj_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+        New_Obj_Bteq_File.write(".SET WIDTH 65531;\n")
+        New_Obj_Bteq_File.write(".SET ERROROUT STDOUT;\n")
+        New_Obj_Bteq_File.write(".Set Separator '|'\n")
+        New_Obj_Bteq_File.write(".set TITLEDASHES OFF\n")
+        New_Obj_Bteq_File.write("\n")
+        
+        New_Obj_Bteq_File.write("DATABASE EDW_V20_CODE_REVIEW_OUT;\n")
+        New_Obj_Bteq_File.write("\n")
+        New_Obj_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+        New_Obj_Bteq_File.write("\n")
+        New_Obj_Bteq_File.write(".EXPORT REPORT FILE = "+New_Obj_Bteq_Export_FileName+";\n")
+        New_Obj_Bteq_File.write("\n")
+        for i in range(len(List_New_Obj_Name)):
+            Objects_Array = List_New_Obj_Name[i].split("|")
+            Path_Obj_name = Objects_Array[0]
+            Tgt_Path_or_Fol_name = Objects_Array[1]
+            
+            if Tgt_Path_or_Fol_name[-1:] != "/" and Form_type == "BTEQ" :
+                Tgt_Path_or_Fol_name = Tgt_Path_or_Fol_name+"/"
+            old_obj_flag = False 
+            if Form_type == "BTEQ" :
+                for Sid in range(len(Summary_Export_Array)):
+                    Sum_Objects_Array = Summary_Export_Array[Sid].split("|")
+                    Sum_Obj_Name = Sum_Objects_Array[0].strip()
+                    Sum_Obj_Path = Sum_Objects_Array[2].strip()
+                    if Path_Obj_name.lower() == Sum_Obj_Name.lower() and Tgt_Path_or_Fol_name.lower() == Sum_Obj_Path.lower() :
+                        old_obj_flag = True
+                        break
+                if old_obj_flag == False :
+                    if Target_Environment.upper().find("EDL") +1 > 0 : 
+                        if Target_Environment.upper().find("EDL") +1 > 0 :
+                            pos2 = Tgt_Path_or_Fol_name.find("/",1)+1
+                            path2 = Tgt_Path_or_Fol_name[pos2:len(Tgt_Path_or_Fol_name)]
+                            second_half = path2[path2.find("/"):len(path2)]
+                            Tgt_Path_or_Fol_name = "'/gpfs02/sit"+second_half+"','"+"/gpfs02/sit2"+second_half+"','"+"/gpfs03/ft"+second_half+"'" 
+                        else:
+                            Tgt_Path_or_Fol_name = "'"+Tgt_Path_or_Fol_name+"'"
+                    elif Target_Environment.upper().find("BI") +1 > 0 : 
+                        if Target_Environment.upper().find("BI") +1 > 0 :
+                            pos2 = Tgt_Path_or_Fol_name.find("/",1)+1
+                            path2 = Tgt_Path_or_Fol_name[pos2:len(Tgt_Path_or_Fol_name)]
+                            second_half = path2[path2.find("/"):len(path2)]
+                            Tgt_Path_or_Fol_name = "'/gpfs02/sit"+second_half+"','/gpfs03/ft"+second_half+"'"
+                        else:
+                            Tgt_Path_or_Fol_name = "'"+Tgt_Path_or_Fol_name+"'"
+                    elif Target_Environment.upper().find("DX") +1 > 0 : 
+                        if Tgt_Path_or_Fol_name.lower().find("/u01va10tupinf002/app/")+1 > 0 : 
+                            pos1 = Tgt_Path_or_Fol_name.find("/u01va10tupinf002/app/")+len("/u01va10tupinf002/app/")
+                            First_Half = Tgt_Path_or_Fol_name[pos1:len(Tgt_Path_or_Fol_name)]
+                            Tgt_Path_or_Fol_name = "'"+Tgt_Path_or_Fol_name+"',"+"'/dxcode/"+First_Half+"'"
+                        elif Tgt_Path_or_Fol_name.lower().find("/dxcode/")+1 > 0 :
+                            pos1 = Tgt_Path_or_Fol_name.find("/",1)+1
+                            First_Half = Tgt_Path_or_Fol_name[pos1:len(Tgt_Path_or_Fol_name)]
+                            Tgt_Path_or_Fol_name = "'"+Tgt_Path_or_Fol_name+"',"+"'/u01va10tupinf002/app/"+First_Half+"'"
+                        elif Tgt_Path_or_Fol_name.lower().find("/gpfs12/uat/dx/code/")+1 > 0 :
+                            pos1 = Tgt_Path_or_Fol_name.find("/gpfs12/uat/dx/code/")+len("/gpfs12/uat/dx/code/")
+                            First_Half = Tgt_Path_or_Fol_name[pos1:len(Tgt_Path_or_Fol_name)]
+                            Tgt_Path_or_Fol_name = "'"+Tgt_Path_or_Fol_name+"',"+"'/dxcode/"+First_Half+"',"+"'/u01va10tupinf002/app/"+First_Half+"'"
+                        else:
+                            Tgt_Path_or_Fol_name = "'"+Tgt_Path_or_Fol_name+"'"
+                    elif Target_Environment.upper().find("WCC")+1 > 0 : 
+                        Tgt_Path_or_Fol_name = "'"+Tgt_Path_or_Fol_name+"'"
+                    elif Target_Environment.upper().find("FEPDEV")+1 > 0 : 
+                        Tgt_Path_or_Fol_name = "'"+Tgt_Path_or_Fol_name+"'"
+                    elif Target_Environment.upper().find("NEUAT")+1 > 0 : 
+                        Tgt_Path_or_Fol_name = "'"+Tgt_Path_or_Fol_name+"'"
+                    else  :
+                        Tgt_Path_or_Fol_name = "'"+Tgt_Path_or_Fol_name+"'"
+                    New_Obj_Bteq_File.write("Select * From FCAT_EXCEPTION_UNIX_SCRIPTS Where script_name = '"+Path_Obj_name+"' and script_path in ("+Tgt_Path_or_Fol_name+");\n")
+                    New_Obj_Bteq_File.write("\n") 
+                    New_Obj_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+            else:
+                if Path_Obj_name.find(".")+1 > 0 :
+                    Path_Obj_name = Path_Obj_name[:Path_Obj_name.rfind(".")]
+                New_Obj_Bteq_File.write("Select * From FCAT_EXCEPTION_WORKFLOWS Where INFA_WORKFLOW_NAME = '"+Path_Obj_name+"' and INFA_FOLDER_NAME ='"+Tgt_Path_or_Fol_name+"' ;\n")
+                New_Obj_Bteq_File.write("\n") 
+                New_Obj_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+        New_Obj_Bteq_File.write(".LOGOFF\n")
+        New_Obj_Bteq_File.write(".QUIT 0\n")
+        New_Obj_Bteq_File.write(".lABEL ERRORS\n")
+        New_Obj_Bteq_File.write(".QUIT ERRORCODE\n")
+        New_Obj_Bteq_File.close()
+        
+        New_Obj_Bteq_log = CAPATH+"\ICRF_BTEQ_LOGS_D\\"+ICRF_Name+"_New_Obj_BTEQ_Log"+TimeStamp+".txt"
+        
+        input = open(New_Obj_Bteq, 'rb').read()
+        rc = Popen(['bteq.exe',TD_IP_Str], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+        out, err = rc.communicate(input=input)
+        with open(New_Obj_Bteq_log, "w") as outfile:
+            outfile.write(out.decode())
+        return_Code = rc.returncode
+        
+        if return_Code > 0 :
+            try:
+                os.remove(New_Obj_Bteq)
+            except Exception:
+                pass
+            try:
+                os.remove(New_Obj_Bteq_log)
+            except Exception:
+                pass
+            try:
+                os.remove(New_Obj_Bteq_Export_FileName)
+            except Exception:
+                pass
+            MSG_BODY="FOR THE USER "+User_Id+" FCAT PRODUCTION OBJECT VERIFICATION FAILED ,WITH RETURN CODE:"+return_Code
+            SBJ="FCAT PROCESS HAS BEEN STOPPED."
+            End_Process(ICRF_FileName)
+            mail_to_user(SBJ,MSG_BODY,Mail_Str)
+            #print(MSG_BODY)
+            sys.exit(MSG_BODY)
+        else:
+            try:
+                os.remove(New_Obj_Bteq)
+            except Exception:
+                pass
+            try:
+                os.remove(New_Obj_Bteq_log)
+            except Exception:
+                pass
+            New_Obj_Details_Arr = []
+            if os.path.isfile(New_Obj_Bteq_Export_FileName) == True :
+                with open(New_Obj_Bteq_Export_FileName, 'r') as New_ExpFile:
+                    New_Obj_StrChar_Arr = New_ExpFile.readlines()
+                for n_cnt in range(len(New_Obj_StrChar_Arr)):
+                    New_Obj_StrChar = New_Obj_StrChar_Arr[n_cnt].strip()
+                    if New_Obj_StrChar.find("SCRIPT_NAME") == -1 and New_Obj_StrChar.find("INFA_WORKFLOW_NAME") == -1:
+                        Exp_New_Obj_Arr = New_Obj_StrChar.split("|")
+                        New_Obj_Nm = Exp_New_Obj_Arr[0].strip()
+                        New_Obj_Path = Exp_New_Obj_Arr[1].strip()
+                        New_Obj_UniqId = Exp_New_Obj_Arr[3].strip()
+                        New_Obj_Details_Arr.append(New_Obj_Nm+"|"+New_Obj_Path+"|"+New_Obj_UniqId)
+                        #New_Obj_Cnt = New_Obj_Cnt + 1
+                try:
+                    os.remove(New_Obj_Bteq_Export_FileName)
+                except Exception:
+                    pass
+        '''-----------------------------------------------------------------
+        'Logic to Get the Object details from Baseline Table
+        '------------------------------------------------------------------'''
+        Baseline_Export_FileName= CAPATH+"\ICRF_BTEQ_LOGS_D\Baseline_Query_Export_File_Line"+TimeStamp+".txt"
+        Baeline_Sel_Bteq = CAPATH+"\ICRF_BTEQ_TMP_D\\"+ICRF_Name+"_Baseline_Select_BTEQ_"+TimeStamp+".btq"
+        Baseline_Sel_Bteq_File = open(Baeline_Sel_Bteq, "w")
+        EXCEPTION_APPROVALl = "NA"
+        ASSESSMENT_TYPE = "FCAT"   
+        
+        Baseline_Sel_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+        Baseline_Sel_Bteq_File.write(".SET WIDTH 65531;\n")
+        Baseline_Sel_Bteq_File.write(".SET ERROROUT STDOUT;\n")
+        Baseline_Sel_Bteq_File.write(".Set Separator '|'\n")
+        Baseline_Sel_Bteq_File.write(".set TITLEDASHES OFF\n")
+        Baseline_Sel_Bteq_File.write("\n")
+        Baseline_Sel_Bteq_File.write("DATABASE EDW_V20_CODE_REVIEW_OUT;\n")
+        Baseline_Sel_Bteq_File.write("\n")
+        Baseline_Sel_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+        Baseline_Sel_Bteq_File.write("\n")
+        Baseline_Sel_Bteq_File.write(".EXPORT REPORT FILE = "+Baseline_Export_FileName+";\n")
+        for Bsidx in range(len(Total_Details_Array)):
+            Baseline_Obj_Array = Total_Details_Array[Bsidx].split("|") 
+            Baseline_obj_name = Baseline_Obj_Array[0].strip()
+            if len(Baseline_Obj_Array) > 4 :
+                if Form_type == "BTEQ" :
+                    Baseline_obj_EUI = Baseline_Obj_Array[4].strip()
+                else:
+                    Baseline_obj_EUI = Baseline_Obj_Array[4].strip()
+            for BEidx in range(len(Summary_Export_Array)):
+                Export_Details_Arr = Summary_Export_Array[BEidx].split( "|")
+                Base_Obj_Nm = Export_Details_Arr[0].strip()
+                if Base_Obj_Nm.find(".") == -1 :
+                    Base_Obj_Nm = Base_Obj_Nm+".xml"
+                if Baseline_obj_name.lower() == Base_Obj_Nm.lower():
+                    if Baseline_obj_EUI == "?" :
+                        if Form_type == "BTEQ" : 
+                            Baseline_Prod_Path = Baseline_Obj_Array[3].strip()
+                            Baseline_Sel_Bteq_File.write("Select PUS.SCRIPT_PATH, PUS.ERROR_COUNT, PFB.UNIQUE_IDENTIFIER,cast(PFB.SCRIPT_OR_XMLNAME as char(250)) as SCRIPT_OR_XMLNAME, PFB.ERROR_CODE, PFB.ERRORCODE_OCCURRENCE  from PRODUCTION_UNIX_SCRIPTS PUS inner join PRODUCTION_FCAT_BASELINE PFB on PUS.UNIQUE_IDENTIFIER = PFB.UNIQUE_IDENTIFIER and PUS.SCRIPT_NAME = PFB.SCRIPT_OR_XMLNAME and PUS.SCRIPT_NAME ='"+Baseline_obj_name+"' and script_path = '"+Baseline_Prod_Path+"';\n")
+                        else :
+                            Baseline_infa_obj_name = Baseline_obj_name[:Baseline_obj_name.rfind(".")]
+                            INFA_Base_Folder = Baseline_Obj_Array[3].strip()
+                            Base_Folder_Nm = INFA_Base_Folder.strip()
+                            Base_Folder_Rep_Nm = Ser_Rep_Nm_One
+                            Baseline_Sel_Bteq_File.write("Select PIW.INFA_FOLDER_NAME, PIW.ERROR_COUNT, PFB.UNIQUE_IDENTIFIER,cast(PFB.SCRIPT_OR_XMLNAME as char(250)) as SCRIPT_OR_XMLNAME, PFB.ERROR_CODE, PFB.ERRORCODE_OCCURRENCE  from PRODUCTION_INFA_WORKFLOWS PIW inner join PRODUCTION_FCAT_BASELINE PFB on PIW.UNIQUE_IDENTIFIER = PFB.UNIQUE_IDENTIFIER and PIW.INFA_WORKFLOW_NAME = PFB.SCRIPT_OR_XMLNAME and PIW.INFA_WORKFLOW_NAME ='"+Baseline_infa_obj_name+"' and PIW.INFA_FOLDER_NAME = '"+Base_Folder_Nm+"' and PIW.REPOSITORY_NAME ='"+Base_Folder_Rep_Nm+"';\n")
+    #                '''-----------------------------------------------------------------------------------------------------
+    #                'Logic to Get the Exceptional Approval Object details from CA_ERRORCODE_OCCURRENCE + Production Tables
+    #                '-----------------------------------------------------------------------------------------------------'''
+                    elif len(Baseline_obj_EUI) > 0 :
+                        if Form_type == "BTEQ" : 
+                            Baseline_Prod_Path = Baseline_Obj_Array[3].strip()
+                            Baseline_Sel_Bteq_File.write("Select PUS.SCRIPT_PATH, PUS.ERROR_COUNT, PFB.UNIQUE_IDENTIFIER,cast(PFB.BTEQ_XML_LOGONID as char(250)) as SCRIPT_OR_XMLNAME, PFB.ERROR_CODE, PFB.ERRORCODE_OCCURRENCE  from PRODUCTION_UNIX_SCRIPTS PUS inner join CA_ERRORCODE_OCCURRENCE PFB on PUS.EXCEPTION_UNIQUE_IDENTIFIER = PFB.UNIQUE_IDENTIFIER and PUS.SCRIPT_NAME = PFB.BTEQ_XML_LOGONID and PUS.SCRIPT_NAME ='"+Baseline_obj_name+"' and script_path = '"+Baseline_Prod_Path+"' and  PFB.UNIQUE_IDENTIFIER = '"+Baseline_obj_EUI+"';\n")
+                        else :
+                            Baseline_infa_obj_name = Baseline_obj_name
+                            INFA_Base_Folder = Baseline_Obj_Array[3].strip()            
+                            Base_Folder_Nm = INFA_Base_Folder.strip()
+                            Base_Folder_Rep_Nm = Ser_Rep_Nm_One
+                            Baseline_Sel_Bteq_File.write("Select PIW.INFA_FOLDER_NAME, PIW.ERROR_COUNT, PFB.UNIQUE_IDENTIFIER,cast(PFB.BTEQ_XML_LOGONID as char(250)) as SCRIPT_OR_XMLNAME, PFB.ERROR_CODE, PFB.ERRORCODE_OCCURRENCE  from PRODUCTION_INFA_WORKFLOWS PIW inner join CA_ERRORCODE_OCCURRENCE PFB on PIW.EXCEPTION_UNIQUE_IDENTIFIER = PFB.UNIQUE_IDENTIFIER and PFB.BTEQ_XML_LOGONID =  PIW.INFA_WORKFLOW_NAME||'.xml' and PFB.BTEQ_XML_LOGONID ='"+Baseline_infa_obj_name+"' and PIW.INFA_FOLDER_NAME = '"+Base_Folder_Nm+"' and PIW.REPOSITORY_NAME ='"+Base_Folder_Rep_Nm+"';\n")
+            if len(New_Obj_Details_Arr) > 0 :
+                for k in range(len(New_Obj_Details_Arr)):
+                    New_Det_Arr = New_Obj_Details_Arr[k].split("|")
+                    New_Obj_Nm = New_Det_Arr[0].strip()
+                    New_Obj_Path = New_Det_Arr[1].strip()
+                    New_Obj_EUI = New_Det_Arr[2].strip()
+                    if Baseline_obj_name.lower().find(".xml") > 0 :
+                        Baseline_obj_name = Baseline_obj_name[:Baseline_obj_name.rfind(".")]
+                    '''----------------------------------------------------------------------------------------------------------
+                    'Logic to Get the New Object Exceptional Approval details from CA_ERRORCODE_OCCURRENCE + Exceptional Tables
+                    '----------------------------------------------------------------------------------------------------------'''
+                    if Baseline_obj_name.lower() == New_Obj_Nm.lower():
+                        if Form_type == "BTEQ" :
+                            Baseline_Sel_Bteq_File.write("Select EUS.SCRIPT_PATH, CEO.ERRORCODE_OCCURRENCE, CEO.UNIQUE_IDENTIFIER,cast(CEO.BTEQ_XML_LOGONID as char(250)) as BTEQ_XML_LOGONID, CEO.ERROR_CODE, CEO.ERRORCODE_OCCURRENCE  from CA_ERRORCODE_OCCURRENCE CEO inner join FCAT_EXCEPTION_UNIX_SCRIPTS EUS on CEO.UNIQUE_IDENTIFIER = EUS.EXCEPTION_UNIQUE_IDENTIFIER and CEO.BTEQ_XML_LOGONID = EUS.SCRIPT_NAME and EUS.SCRIPT_NAME ='"+New_Obj_Nm+"' and EUS.EXCEPTION_UNIQUE_IDENTIFIER = '"+New_Obj_EUI+"';\n")
+                        else :
+                            Baseline_Sel_Bteq_File.write("Select FEW.INFA_FOLDER_NAME, CEO.ERRORCODE_OCCURRENCE, CEO.UNIQUE_IDENTIFIER,cast(CEO.BTEQ_XML_LOGONID as char(250)) as BTEQ_XML_LOGONID, CEO.ERROR_CODE, CEO.ERRORCODE_OCCURRENCE  from CA_ERRORCODE_OCCURRENCE CEO inner join FCAT_EXCEPTION_WORKFLOWS FEW on CEO.UNIQUE_IDENTIFIER = FEW.EXCEPTION_UNIQUE_IDENTIFIER and CEO.BTEQ_XML_LOGONID =  FEW.INFA_WORKFLOW_NAME||'.xml' and FEW.INFA_WORKFLOW_NAME ='"+New_Obj_Nm+"' and FEW.INFA_FOLDER_NAME = '"+New_Obj_Path+"' and FEW.EXCEPTION_UNIQUE_IDENTIFIER = '"+New_Obj_EUI+"';\n")
+            Baseline_Sel_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+            Baseline_Sel_Bteq_File.write("\n")
+        Baseline_Sel_Bteq_File.write(".LOGOFF\n")
+        Baseline_Sel_Bteq_File.write(".QUIT 0\n")
+        Baseline_Sel_Bteq_File.write(".lABEL ERRORS\n")
+        Baseline_Sel_Bteq_File.write(".QUIT ERRORCODE\n")
+        Baseline_Sel_Bteq_File.close()
+        
+        Baseline_Bteq_Sel_log = CAPATH+"\ICRF_BTEQ_LOGS_D\\"+ICRF_Name+"_Baseline_Sel_Metrics_Log_"+TimeStamp+".txt"
+        
+        input = open(Baeline_Sel_Bteq, 'rb').read()
+        rc = Popen(['bteq.exe',TD_IP_Str], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+        out, err = rc.communicate(input=input)
+        with open(Baseline_Bteq_Sel_log, "w") as outfile:
+            outfile.write(out.decode())
+        return_Code = rc.returncode
+        
+        if return_Code > 0 :
+            try:
+                os.remove(Baeline_Sel_Bteq)
+            except Exception:
+                pass
+            try:
+                os.remove(Baseline_Bteq_Sel_log)
+            except Exception:
+                pass
+            try:
+                os.remove(Baseline_Export_FileName)
+            except Exception:
+                pass
+            SBJ=User_Id+" FCAT BASELINE EXPORT BTEQ FAILED ,WITH RETURN CODE:"+str(return_Code)
+            MSG_BODY="FCAT BASELINE DETAILS ARE NOT LOADED"
+            End_Process(ICRF_FileName)
+            mail_to_user(SBJ,MSG_BODY,Mail_Str)
+            #print(MSG_BODY)
+            sys.exit(MSG_BODY)
+        else:
+            try:
+                os.remove(Baeline_Sel_Bteq)
+            except Exception:
+                pass
+            try:
+                os.remove(Baseline_Bteq_Sel_log)
+            except Exception:
+                pass
+        Baseline_Export_Array = []
+        if os.path.isfile(Baseline_Export_FileName) == True :
+            with open(Baseline_Export_FileName, 'r') as Base_ExpFile:
+                Baseline_Exp_Detais_Arr = Base_ExpFile.readlines()
+            Base_Exp = 0
+            for b_cnt in range(len(Baseline_Exp_Detais_Arr)):
+                Baseline_Exp_Detais= Baseline_Exp_Detais_Arr[b_cnt].strip()
+                if Baseline_Exp_Detais.find("UNIQUE_IDENTIFIER") == -1 :
+                    Baseline_Export_Array.append(Baseline_Exp_Detais)
+                    Base_Exp = Base_Exp + 1
+            try:
+                os.remove(Baseline_Export_FileName)
+            except Exception:
+                pass
+        for i in range(len(Baseline_Export_Array)):
+            Tot_Err = 0
+            Base_con_log = Baseline_Export_Array[i].split("|") 
+            Base_con_obj_name = Base_con_log[3].strip()
+            for k in range(len(Baseline_Export_Array)):
+                Camp_Base_con_log = Baseline_Export_Array[k].split("|") 
+                Camp_Base_con_obj_name = Camp_Base_con_log[3].strip()
+                Camp_Base_error_occ = Camp_Base_con_log[5].strip()
+                if Base_con_obj_name.lower() == Camp_Base_con_obj_name.lower() :
+                    Tot_Err = Tot_Err + int(Camp_Base_error_occ)
+            New_Found = False
+            if Form_type == "INFA" :
+                if Base_con_obj_name.lower().find(".xml") > 0 :
+                    Base_con_obj_name = Base_con_obj_name[:Base_con_obj_name.rfind(".")]
+            for NOid in range(len(New_Obj_Details_Arr)):
+                New_Det_Arr = New_Obj_Details_Arr[NOid].split("|")
+                New_Obj_Nm = New_Det_Arr[0].strip()
+                if Base_con_obj_name.lower() == New_Obj_Nm.lower() :
+                    New_Found = True
+                    break
+            if New_Found == True : 
+                Baseline_Export_Array[i] = Base_con_log[0].strip()+"|"+str(Tot_Err)+"|"+Base_con_log[2].strip()+"|"+Base_con_log[3].strip()+"|"+Base_con_log[4].strip()+"|"+Base_con_log[5].strip()+"|NEW"
+            else :
+                Baseline_Export_Array[i] = Base_con_log[0].strip()+"|"+str(Tot_Err)+"|"+Base_con_log[2].strip()+"|"+Base_con_log[3].strip()+"|"+Base_con_log[4].strip()+"|"+Base_con_log[5].strip()+"|OLD"
+        #Temp_Mdx_Cnt = Met_Exp_Cnt
+        Error_Obj_Name = ""
+        Error_Obj_Name_New = ""
+        Prob_Query_Name = ""
+        New_Obj_Name = ""
+        Base_Obj_Name = ""
+        New_Obj_Name_Tmp = ""
+        Base_Obj_Name_Tmp = ""
+        Prob_Query_Flag = False 
+        New_Obj_Err_Det = 0
+        Old_Obj_Base_Det = 0
+        Old_Obj_FCAT_Det = 0
+        Old_Obj_Err_Base = 0
+        Err_Diff_Val = ""
+        Err_Diff_Flag = False
+        for MEidx in range(len(Metrics_Export_Array)):
+            if len(Metrics_Export_Array[MEidx]) > 0 :
+                Metrics_Objects_Array = Metrics_Export_Array[MEidx].split("|")
+                Metrics_Obj_Path = Metrics_Objects_Array[0].strip()
+                Metrics_Obj_Name = Metrics_Objects_Array[1].strip()
+                Metrics_error_code = Metrics_Objects_Array[2].strip()
+                Metrics_Err_Occur = Metrics_Objects_Array[3].strip()
+                Metrics_Err_count = Metrics_Objects_Array[4].strip()
+                Metrics_prob_Query = Metrics_Objects_Array[5].strip()
+                if Metrics_prob_Query.upper() ==  "TRUE" :
+                    if len(Prob_Query_Name) == 0 :
+                        Prob_Query_Name = Metrics_Obj_Name
+                    else:
+                        Prob_Query_Name = Prob_Query_Name+"^CA^"+Metrics_Obj_Name
+                    Prob_Query_Flag = True 
+                    for idx in range(len(Metrics_Export_Array)):
+                        if len(Metrics_Export_Array[idx]) > 0 :
+                            Com_Metrics_Objects_Array = Metrics_Export_Array[idx].split("|")
+                            Com_Metrics_Obj_Name = Com_Metrics_Objects_Array[1]
+                            if Metrics_Obj_Name.lower() == Com_Metrics_Obj_Name.lower():
+                                Metrics_Export_Array[idx] = ""
+                found_obj = False
+                Err_Diff_Flag = False
+                Error_Count_Flag = False 
+                Match_Obj_Found = False
+                Base_Obj_Found = False
+                Base_con_obj_name_cm =""
+                Old_Diff_Gen = False
+                for Bidx in range(len(Baseline_Export_Array)):
+                    Base_con_log = Baseline_Export_Array[Bidx].split("|") 
+                    Base_Prod_Path = Base_con_log[0].strip()
+                    Base_err_count = Base_con_log[1].strip()
+                    Base_con_obj_name = Base_con_log[3].strip()
+                    Base_error_code = Base_con_log[4].strip()
+                    Base_error_occ = Base_con_log[5].strip()
+                    if Base_con_obj_name.upper().find("SCRIPT_OR_XMLNAME") == -1 :
+                        if Form_type =="INFA" and Base_con_obj_name.find(".") == -1 : 
+                            Xml_Ext = Metrics_Obj_Name[-4:]
+                            Base_con_obj_name = Base_con_obj_name+Xml_Ext
+                        if Metrics_Obj_Name.lower() == Base_con_obj_name.lower() : 
+                            Match_Obj_Found = True
+                            Old_Obj_Err_Base = Base_err_count
+                            if  int(Metrics_Err_count) > int(Base_err_count) :
+                                Error_Count_Flag = True
+                                found_obj = True                                
+                            elif Metrics_error_code == Base_error_code and int(Metrics_Err_Occur) > int(Base_error_occ) : 
+                                found_obj = True
+                            elif Metrics_error_code == Base_error_code :
+                                Base_Obj_Found = True
+                            Base_con_obj_name_cm = Base_con_obj_name
+                        if (found_obj == True and Match_Obj_Found == True)  or (Match_Obj_Found == True and Base_Obj_Found == False and Bidx == (Base_Exp - 1) ) :
+                            if Base_con_log[6] == "OLD" :
+                                if len(Error_Obj_Name) == 0 :
+                                    Error_Obj_Name = Metrics_Obj_Name
+                                else:
+                                    Error_Obj_Name = Error_Obj_Name+"^CA^"+Metrics_Obj_Name
+                            if len(Error_Obj_Name_New) == 0 :
+                                Error_Obj_Name_New = Metrics_Obj_Name
+                            else:
+                                Error_Obj_Name_New = Error_Obj_Name_New+"^CA^"+Metrics_Obj_Name
+                            
+                            Err_Diff_Flag = True
+                            for idx in range(len(Metrics_Export_Array)):
+                                if len(Metrics_Export_Array[idx]) > 0 :
+                                    Com_Metrics_Objects_Array = Metrics_Export_Array[idx].split("|")
+                                    Com_Metrics_Obj_Name = Com_Metrics_Objects_Array[1].strip()
+                                    if Base_con_obj_name_cm.lower() == Com_Metrics_Obj_Name.lower() :
+                                        Metrics_Export_Array[idx] = ""
+                            break 
+                        if Base_con_log[6] == "OLD" :
+                            Old_Diff_Gen = True
+                if Match_Obj_Found == False and int(Metrics_Err_count) > 0 :
+                    if len(New_Obj_Name) == 0 :
+                        New_Obj_Name = Metrics_Obj_Name
+                    else:
+                        New_Obj_Name = New_Obj_Name+"^CA^"+Metrics_Obj_Name
+                elif Match_Obj_Found == True and Error_Count_Flag == False and found_obj == False  :
+                    if len(Base_Obj_Name) == 0 :
+                        Base_Obj_Name = Metrics_Obj_Name
+                    else:
+                        Base_Obj_Name = Base_Obj_Name+"^CA^"+Metrics_Obj_Name
+                    if Old_Diff_Gen == True and len(Old_Obj_Present) == 0 :
+                        Old_Obj_Present = Base_Obj_Name
+                if Match_Obj_Found == False :
+                    if len(New_Obj_Name_Tmp) == 0 :
+                        New_Obj_Name_Tmp = Metrics_Obj_Name
+                        New_Obj_Err_Det = Metrics_Err_count
+                    else:
+                        New_Obj_Name_Tmp = New_Obj_Name_Tmp+"^CA^"+Metrics_Obj_Name
+                        New_Obj_Err_Det = New_Obj_Err_Det+"^CA^"+Metrics_Err_count
+                elif Match_Obj_Found == True :
+                    if len(Base_Obj_Name_Tmp) == 0 :
+                        Base_Obj_Name_Tmp = Metrics_Obj_Name
+                        Old_Obj_Base_Det = Old_Obj_Err_Base
+                        Old_Obj_FCAT_Det = Metrics_Err_count
+                        Err_Diff_Val = str(Err_Diff_Flag)
+                    else:
+                        Base_Obj_Name_Tmp = Base_Obj_Name_Tmp+"^CA^"+Metrics_Obj_Name
+                        Old_Obj_Base_Det = Old_Obj_Base_Det+"^CA^"+Old_Obj_Err_Base
+                        Old_Obj_FCAT_Det = Old_Obj_FCAT_Det+"^CA^"+Metrics_Err_count
+                        Err_Diff_Val = Err_Diff_Val+"^CA^"+str(Err_Diff_Flag)
+        Prob_Query_Name_Tmp = Prob_Query_Name
+        TL_MAIL = []
+        TL_MAIL.append(Team_Lead_Id.strip()+"@wellpoint.com")
+        SBJ="FCAT process is completed for:"+ICRF_Name_Temp+".csv;Logs posted at "+CAPATH+"\ICRF_LOGS_D\\"+ICRF_Name_Temp 
+        Error_Obj_Name = Error_Obj_Name.replace("^CA^","\n")
+        Error_Obj_Name_New = Error_Obj_Name_New.replace("^CA^","\n")
+        Prob_Query_Name = Prob_Query_Name.replace("^CA^","\n")
+        New_Obj_Name = New_Obj_Name.replace("^CA^","\n")
+        Base_Obj_Name = Base_Obj_Name.replace("^CA^","\n")
+        if len(Prob_Query_Name)> 0 and ( len(Error_Obj_Name) > 0 or len(Error_Obj_Name_New) > 0 ) :
+            if len(Error_Obj_Name) > 0 :
+                MSG="Please find the below objects, for which Teradata code review process not performed or scripts are present in the ProblemQueryTracking table. For further details Please verify the consolidated log. files."+"\n"+"\n"+Prob_Query_Name+"\n"+"\n"+"\n"+"Please find the below consolidated details."+"\n"+"\n"+"Errors-"+str(Errors_Total)+"\n"+"unique identifier-"+Unique_Identifier_Info+"\n"+"\n"+"For exception approval, please contact Tech Lead or Code Approver: "+Team_Lead_Id+" by providing the FCAT log."
+            elif len(Error_Obj_Name_New) > 0 : 
+                MSG="Please find the below objects, for which Teradata code review process not performed or scripts are present in the ProblemQueryTracking table. For further details Please verify the consolidated log. files."+"\n"+"\n"+Prob_Query_Name+"\n"+"\n"+"Please find the below consolidated details."+"\n"+"Errors-"+str(Errors_Total)+"\n"+"unique identifier-"+Unique_Identifier_Info+"\n"+"\n"+"For exception approval, please contact Tech Lead or Code Approver: "+Team_Lead_Id+" by providing the FCAT log."        
+        elif len(Error_Obj_Name) > 0 or len(Error_Obj_Name_New) > 0 :
+            if len(Error_Obj_Name) > 0 :
+                MSG="Please find the below objects Diff log details, the Diff log path at "+CAPATH+"\ICRF_LOGS_D\\"+ICRF_Name_Temp+"\n"+"\n"+"\n"+Error_Obj_Name+"\n"+"\n"+"Please find the below consolidated details."+"\n"+"Errors-"+str(Errors_Total)+"\n"+"unique identifier-"+Unique_Identifier_Info+"\n"+"\n"+"For exception approval, please contact Tech Lead or Code Approver: "+Team_Lead_Id+" by providing the FCAT log."
+            elif len(Error_Obj_Name_New) > 0 : 
+                MSG="Please find the below consolidated details."+"\n"+"Errors-"+str(Errors_Total)+"\n"+"unique identifier-"+Unique_Identifier_Info+"\n"+"\n"+"For exception approval, please contact Tech Lead or Code Approver: "+Team_Lead_Id+" by providing the FCAT log."
+        elif len(Prob_Query_Name)> 0 :
+            MSG="Please find the below objects, for which Teradata code review process not performed or scripts are present in the ProblemQueryTracking table. For further details Please verify the consolidated log. files."+"\n"+"\n"+Prob_Query_Name+"\n"+"\n"+"Please find the below consolidated details."+"\n"+"Errors-"+str(Errors_Total)+"\n"+"unique identifier-"+Unique_Identifier_Info+"\n"+"\n"+"For exception approval, please contact Tech Lead or Code Approver: "+Team_Lead_Id+" by providing the FCAT log."
+        elif len(New_Obj_Name) > 0 :
+            MSG="Please find the below consolidated details."+"\n"+"Errors-"+str(Errors_Total)+"\n"+"unique identifier-"+Unique_Identifier_Info+"\n"+"\n"+"For exception approval, please contact Tech Lead or Code Approver: "+Team_Lead_Id+" by providing the FCAT log."
+        elif len(Base_Obj_Name) > 0 and len(New_Obj_Name) == 0 :
+            Form_Exist == False
+            if os.path.isfile(Target_Env_Location+"\\"+ICRF_Name+".csv") == True :
+                SBJ="FCAT process is completed for:"+ICRF_Name_Temp+".csv." 
+                MSG = "ICRF form with the name "+ICRF_Name+".csv already exists in the FCAT temporary staging folder."
+                mail_to_user(SBJ,MSG,Mail_Str)
+                Form_Exist = True 
+            else:
+                shutil.copy(ICRF_FileName, Target_Env_Location+"\\"+ICRF_Name+".csv")
+            if Form_Exist == False : 
+                SBJ="FCAT process is completed for:"+ICRF_Name_Temp+".csv." 
+                MSG="Code review is successful. No new issues found for the given objects. FCAT transferred the ICRF form to DIS Self-Service staging area. DIS Self-Service process picks the ICRF form in the next Self-Service interval and will perform migration."+"\n"+"\n"+"Unique Identifier-"+Unique_Identifier_Info+"\n"+"\n"
+                mail_to_user(SBJ,MSG,Mail_Str)
+                if len(Old_Obj_Present) == 0 :
+                    Mig_Excp_Flag = True
+                else:
+                    Mig_Base_Flag = True
+                Source_Location_ca = ICRF_FileName
+                if os.path.isfile(Source_Location_ca) == True :
+                    Target_Location_Ca = Target_Location
+                    shutil.copy(Source_Location_ca, Target_Location_Ca)
+        if len(Prob_Query_Name) > 0 or len(Error_Obj_Name) > 0 or len(New_Obj_Name) > 0 or len(Error_Obj_Name_New) > 0 :
+            Ident_File = Ident_Fol_Path+"\SUSPENSE\\"+Unique_Identifier_Info
+            FCAT_Folder = Ident_Fol_Path+"\Logs\\"+Unique_Identifier_Info
+            if os.path.isdir(Ident_File) == False :
+                os.mkdir(Ident_File)
+            if os.path.isdir(FCAT_Folder) == False :
+                os.mkdir(FCAT_Folder)
+            FCAT_Folder_Path = FCAT_Folder+"\\"
+            for l in range(len(List_Obj_Path_Details)):
+                Obj_Path_Arr = List_Obj_Path_Details[l].split("|")
+                Upd_Obj_Name = Obj_Path_Arr[0].strip()
+                Upd_Obj_Path = Obj_Path_Arr[1].strip()
+                No_Ext_Obj_Name = Upd_Obj_Name
+                if Upd_Obj_Name.find(".") > 0 :
+                    No_Ext_Obj_Name = Upd_Obj_Name[:Upd_Obj_Name.rfind(".")]
+                if os.path.isdir(Log_path) == True :
+                    Src_Fl_Nm = No_Ext_Obj_Name+"_log_"
+                    Folder_Files = []
+                    [Folder_Files.extend(filenames) for (dirpath, dirnames, filenames) in walk(Log_path)]
+                    for obj_name in Folder_Files:
+                        if obj_name.lower().find(Src_Fl_Nm.lower()) +1 > 0 :
+                            Src_Fl_Nm = Log_path+"\\"+obj_name
+                            if Form_type == "BTEQ" :
+                                Temp_Share_Only_Name = No_Ext_Obj_Name+Upd_Obj_Path.replace("/","_")+"log.txt" 
+                                Temp_Share_Obj_Nm = Log_path+"\\"+No_Ext_Obj_Name+Upd_Obj_Path.replace("/","_")+"log.txt"
+                            else:
+                                Temp_Share_Only_Name = No_Ext_Obj_Name+"_"+Upd_Obj_Path.replace("/","_")+"_log.txt" 
+                                Temp_Share_Obj_Nm = Log_path+"\\"+No_Ext_Obj_Name+"_"+Upd_Obj_Path.replace("/","_")+"_log.txt"
+                            os.rename(Src_Fl_Nm, Temp_Share_Obj_Nm)
+                            shutil.copy(Temp_Share_Obj_Nm, FCAT_Folder_Path)
+                            os.rename(Temp_Share_Obj_Nm, Src_Fl_Nm)
+                            break
+            shutil.copy(ICRF_FileName, Ident_File+"\\"+ICRF_Name+"_"+Target_Environment_Tmp+".csv")
+            mail_to_user(SBJ,MSG,Mail_Str)
+            #OShell.Run "\\Va10dwvcat300\CADept$\SELF_CA_HIDE\BLAT\blat.exe -to "+MAIL+" -f unicenter@anthem.com -server smtp.corp.anthem.com -subject "+SBJ+" -body "+MSG+" -q",0, True
+            MSG_New_Tmp = ''
+            if New_Obj_Name_Tmp.find("^CA^")+1 > 0 :
+                New_Obj_Name_Tmp_Arr = New_Obj_Name_Tmp.split("^CA^")
+                New_Obj_Name_Tmp_Len = len(New_Obj_Name_Tmp_Arr)
+                New_Obj_Err_Det_Arr = New_Obj_Err_Det.split("^CA^")
+                Didx = 0
+                New_Obj_Dup_Arr = ['']*len(New_Obj_Name_Tmp_Arr)
+                for i in range(len(New_Obj_Name_Tmp_Arr)):
+                    Dup_Found = False
+                    for j in range(len(New_Obj_Dup_Arr)):
+                        if New_Obj_Name_Tmp_Arr[i].lower() == New_Obj_Dup_Arr[j].lower() :
+                            Dup_Found = True
+                            break
+                    if Dup_Found == False :
+                        if Form_type == "BTEQ" :
+                            for s in range(len(Objects_Names_APIDS)):
+                                Temp_Objects_Names_APID = Objects_Names_APIDS[s]
+                                if Temp_Objects_Names_APID.rfind("_APID") > 0 :
+                                    APID_TD_Temp = Temp_Objects_Names_APID[Temp_Objects_Names_APID.rfind("_"):len(Temp_Objects_Names_APID)]
+                                    if APID_TD_Temp.find("_APID") + 1 > 0 :
+                                        if Temp_Objects_Names_APID[-3:] == ".sh" :
+                                            Temp_Objects_Names_APID = Temp_Objects_Names_APID[:Temp_Objects_Names_APID.rfind("_")]+".sh"
+                                        elif Temp_Objects_Names_APID[-4:] == ".ksh" :
+                                            Temp_Objects_Names_APID = Temp_Objects_Names_APID[:Temp_Objects_Names_APID.rfind("_")]+".ksh"
+                                        APID_TD_Temp = ""
+                                if Temp_Objects_Names_APID.lower() == New_Obj_Name_Tmp_Arr[i].lower() :
+                                    MSG_New_Obj_Name_Tmp = Objects_Names_APIDS[s]
+                                    Objects_Names_APIDS[s] = ""
+                                    Temp_Objects_Names_APID = ""
+                                    break
+                                else :
+                                    MSG_New_Obj_Name_Tmp = New_Obj_Name_Tmp_Arr[i]
+                        else :
+                            MSG_New_Obj_Name_Tmp = New_Obj_Name_Tmp_Arr[i]
+                        if len(MSG_New_Tmp) == 0 :
+                            MSG_New_Tmp = MSG_New_Obj_Name_Tmp+"--"+"New Object and has "+New_Obj_Err_Det_Arr[i]+" errors."
+                        else:
+                            MSG_New_Tmp = MSG_New_Tmp+"^CA^"+MSG_New_Obj_Name_Tmp+"--"+"New Object and has "+New_Obj_Err_Det_Arr[i]+" errors."
+                        New_Obj_Dup_Arr[Didx] = New_Obj_Name_Tmp_Arr[i]
+                        Didx = Didx + 1
+            else:
+                if len(New_Obj_Name_Tmp) > 0 :
+                    if Form_type == "BTEQ" :
+                        for s in range(len(Objects_Names_APIDS)):
+                            Temp_Objects_Names_APID = Objects_Names_APIDS[s]
+                            if Temp_Objects_Names_APID.rfind("_APID") > 0 :
+                                APID_TD_Temp = Temp_Objects_Names_APID[Temp_Objects_Names_APID.rfind("_"):len(Temp_Objects_Names_APID)]
+                                if APID_TD_Temp.find("_APID")+1 > 0 : 
+                                    if Temp_Objects_Names_APID[-3:] == ".sh" :
+                                        Temp_Objects_Names_APID = Temp_Objects_Names_APID[:Temp_Objects_Names_APID.rfind("_")]+".sh"
+                                    elif Temp_Objects_Names_APID[-4:] == ".ksh" :
+                                        Temp_Objects_Names_APID = Temp_Objects_Names_APID[:Temp_Objects_Names_APID.rfind("_")]+".ksh"
+                                    APID_TD_Temp = ""
+                            if Temp_Objects_Names_APID.lower() == New_Obj_Name_Tmp.lower() :
+                                New_Obj_Name_Tmp = Objects_Names_APIDS[s]
+                                Objects_Names_APIDS[s] = ""
+                                Temp_Objects_Names_APID = ""
+                                break
+                    MSG_New_Tmp = New_Obj_Name_Tmp+"--"+"New Object and has "+New_Obj_Err_Det+" errors."
+            MSG_Old_Tmp = ""
+            if Base_Obj_Name_Tmp.find("^CA^")+1 > 0 :
+                Base_Obj_Name_Tmp_Arr = Base_Obj_Name_Tmp.split("^CA^")
+                Base_Obj_Name_Tmp_Len = len(Base_Obj_Name_Tmp_Arr)
+                Old_Obj_Base_Det_Arr = Old_Obj_Base_Det.split("^CA^")
+                Old_Obj_FCAT_Det_Arr = Old_Obj_FCAT_Det.split("^CA^")
+                Err_Diff_Val_Arr = Err_Diff_Val.split("^CA^")    
+                Didx = 0
+                Old_Obj_Dup_Arr = ['']*len(Base_Obj_Name_Tmp_Arr)
+                Prob_Query_Name_Tmp_Len = 0
+                if Prob_Query_Name_Tmp.find("^CA^")+1 > 0 :
+                    Prob_Query_Name_Tmp_Arr = Prob_Query_Name_Tmp.split("^CA^")
+                    Prob_Query_Name_Tmp_Len = len(Prob_Query_Name_Tmp_Arr)
+                for i in range(len(Base_Obj_Name_Tmp_Arr)):
+                    Dup_Found = False
+                    for j in range(len(Old_Obj_Dup_Arr)):
+                        if Base_Obj_Name_Tmp_Arr[i].lower() == Old_Obj_Dup_Arr[j].lower() :
+                            Dup_Found = True
+                            break
+                    Prob_Found = False
+                    if Prob_Query_Name_Tmp_Len > 0 :
+                        for PId in range(Prob_Query_Name_Tmp_Len):
+                            if Base_Obj_Name_Tmp_Arr[i].lower() == Prob_Query_Name_Tmp_Arr[PId] :
+                                Prob_Found = True
+                                break
+                    elif Base_Obj_Name_Tmp_Arr[i].lower() == Prob_Query_Name_Tmp.lower() :
+                        Prob_Found = True
+                    Err_Val_Found = "False"
+                    Pre_obj = Base_Obj_Name_Tmp_Arr[i]
+                    for jid in range(Base_Obj_Name_Tmp_Len):
+                        if Pre_obj.lower() == Base_Obj_Name_Tmp_Arr[jid].lower() :
+                            if Err_Diff_Val_Arr[jid] == "True" :
+                                Err_Val_Found = "True"
+                                break
+                    if Dup_Found == False :
+                        Dif_Err_Cnt = int(Old_Obj_FCAT_Det_Arr[i]) - int(Old_Obj_Base_Det_Arr[i])
+                        if Dif_Err_Cnt <= 0 :
+                            if Err_Val_Found == "True" :
+                                Dif_Err_Det = "Old Object and new errors." 
+                            else:
+                                if Prob_Found == False :
+                                    Dif_Err_Det = "Old Object and No new errors."                                 
+                                else:
+                                    Dif_Err_Det = "Old Object and new errors."
+                        elif Dif_Err_Cnt > 0 :
+                            Dif_Err_Det = "Old Object and "+str(Dif_Err_Cnt)+" new errors."
+                        elif Prob_Found == True :
+                            Dif_Err_Det = "Old Object and new errors."
+                        if Form_type == "BTEQ" : 
+                            for s in range(len(Objects_Names_APIDS)):
+                                Temp_Objects_Names_APID = Objects_Names_APIDS[s]
+                                if Temp_Objects_Names_APID.rfind("_APID") > 0 :
+                                    APID_TD_Temp = Temp_Objects_Names_APID[Temp_Objects_Names_APID.rfind("_"):len(Temp_Objects_Names_APID)]
+                                    if APID_TD_Temp.find("_APID")+1 > 0 : 
+                                        if Temp_Objects_Names_APID[-3:] == ".sh" :
+                                            Temp_Objects_Names_APID = Temp_Objects_Names_APID[:Temp_Objects_Names_APID.rfind("_")]+".sh"
+                                        elif Temp_Objects_Names_APID[-4:] == ".ksh" :
+                                            Temp_Objects_Names_APID = Temp_Objects_Names_APID[:Temp_Objects_Names_APID.rfind("_")]+".ksh"
+                                        APID_TD_Temp = ""
+                                if Temp_Objects_Names_APID.lower() == Base_Obj_Name_Tmp_Arr[i].lower() :
+                                    Base_Obj_Name_Tmp_Arr[i] = Objects_Names_APIDS[s]
+                                    Objects_Names_APIDS[s] = ""
+                                    Temp_Objects_Names_APID = ""
+                                    break
+                        if len(MSG_Old_Tmp) == 0 :
+                            MSG_Old_Tmp = Base_Obj_Name_Tmp_Arr[i]+"--"+Dif_Err_Det
+                        else:
+                            MSG_Old_Tmp = MSG_Old_Tmp+"^CA^"+Base_Obj_Name_Tmp_Arr[i]+"--"+Dif_Err_Det
+                        Dif_Err_Det = ""
+                        Old_Obj_Dup_Arr[Didx] = Base_Obj_Name_Tmp_Arr[i]
+                        Didx = Didx + 1
+            else:
+                Dif_Err_Cnt = int(Old_Obj_FCAT_Det) - int(Old_Obj_Base_Det)
+                Prob_Query_Name_Tmp_Len = 0
+                if Prob_Query_Name_Tmp.find("^CA^") > 0 :
+                    Prob_Query_Name_Tmp_Arr = Prob_Query_Name_Tmp.split("^CA^")
+                    Prob_Query_Name_Tmp_Len = len(Prob_Query_Name_Tmp_Arr)    
+                Prob_Found = False
+                if Prob_Query_Name_Tmp_Len > 0 :
+                    for PId in len(Prob_Query_Name_Tmp_Len):
+                        if Base_Obj_Name_Tmp.lower() == Prob_Query_Name_Tmp_Arr[PId].lower() :
+                            Prob_Found = True
+                            break
+                elif Base_Obj_Name_Tmp.lower() == Prob_Query_Name_Tmp.lower() :
+                    Prob_Found = True
+                if Dif_Err_Cnt <= 0 :
+                    if Err_Diff_Val == "True" :
+                        Dif_Err_Det = "Old Object and new errors." 
+                    else:
+                        if Prob_Found == False :
+                            Dif_Err_Det = "Old Object and No new errors." 
+                        else:
+                            Dif_Err_Det = "Old Object and new errors."
+                elif Dif_Err_Cnt > 0 :
+                    Dif_Err_Det = "Old Object and "+str(Dif_Err_Cnt)+" new errors."
+                elif  Prob_Found == True :    
+                    Err_Det = "Old Object and new errors."
+                if len(Base_Obj_Name_Tmp) > 0  : 
+                    if Form_type == "BTEQ" : 
+                        for s in range(len(Objects_Names_APIDS)):
+                            Temp_Objects_Names_APID = Objects_Names_APIDS[s]
+                            if Temp_Objects_Names_APID.rfind("_APID") > 0 :
+                                APID_TD_Temp = Temp_Objects_Names_APID[Temp_Objects_Names_APID.rfind("_"):len(Temp_Objects_Names_APID)]
+                                if APID_TD_Temp.find("_APID")+1 > 0 : 
+                                    if Temp_Objects_Names_APID[-3:] == ".sh" :
+                                        Temp_Objects_Names_APID = Temp_Objects_Names_APID[:Temp_Objects_Names_APID.rfind("_")]+".sh"
+                                    elif Temp_Objects_Names_APID[-4:] == ".ksh" :
+                                        Temp_Objects_Names_APID = Temp_Objects_Names_APID[:Temp_Objects_Names_APID.rfind("_")]+".ksh"
+                                    APID_TD_Temp = ""
+                            if Temp_Objects_Names_APID.lower() == Base_Obj_Name_Tmp.lower() :
+                                Base_Obj_Name_Tmp = Objects_Names_APIDS[s]
+                                Objects_Names_APIDS[s] = ""
+                                Temp_Objects_Names_APID = ""
+                                break
+                    MSG_Old_Tmp = Base_Obj_Name_Tmp+"--"+Dif_Err_Det
+            MSG_New_Tmp    = MSG_New_Tmp.replace("^CA^","\n")
+            MSG_Old_Tmp    = MSG_Old_Tmp.replace("^CA^","\n")
+            MSG_Det = ""
+            if len(MSG_New_Tmp) > 0 :
+                MSG_Det = MSG_New_Tmp+"\n"+MSG_Old_Tmp
+            else:
+                MSG_Det = MSG_Old_Tmp
+            Exp_Executable_Path = r"\\Va10dwvcat300\UNISHARE$\FCAT_EXCEPTION_APPROVAL"
+            MSG="Please find the below consolidated details."+"\n"+"\n"+"Errors-"+str(Errors_Total)+"\n"+"Unique Identifier-"+Unique_Identifier_Info+"\n"+"\n"+"To provide the exception approval, please request FCAT code review log from the developer: "+User_Id+" and run the FCAT_Exception_Approval.exe executable present in the below path."+"\n"+Exp_Executable_Path+"\n"+"\n"+MSG_Det
+            SBJ="FCAT process is completed for the ICRF form:"+ICRF_Name_Temp+".csv with the Unique Identifier: "+Unique_Identifier_Info
+            mail_to_user(SBJ,MSG,TL_MAIL)
+            Proceed_Mig = "NO"
+        Metrics_Data_File = open(Metrics_Data, 'a')
+        for i in range(len(No_Errors_Arr)):
+            if len(No_Errors_Arr[i]) > 0 :
+                if Form_type == "INFA" :
+                    No_Errors_BTEQ_or_XML_Nm = No_Errors_Arr[i][:No_Errors_Arr[i].rfind(".")]
+                else:
+                    No_Errors_BTEQ_or_XML_Nm = No_Errors_Arr[i]
+                Metrics_Data_File.write(Unique_Identifier_Info+"|"+No_Errors_BTEQ_or_XML_Nm+"|0000|0"+"\n")
+        Metrics_Data_File.close()
+    else:
+        Metrics_Data_File = open(Metrics_Data, 'a')
+        for i in range(len(No_Errors_Arr)):
+            if len(No_Errors_Arr[i]) > 0 :
+                if Form_type == "INFA" :
+                    No_Errors_BTEQ_or_XML_Nm = No_Errors_Arr[i][:No_Errors_Arr[i].rfind(".")]
+                else:
+                    No_Errors_BTEQ_or_XML_Nm = No_Errors_Arr[i]
+                Metrics_Data_File.write(Unique_Identifier_Info+"|"+No_Errors_BTEQ_or_XML_Nm+"|0000|0"+"\n")
+        Metrics_Data_File.close()
+        Form_Exist = False
+        
+        if os.path.isfile(Target_Env_Location+"\\"+ICRF_Name+".csv") == True : 
+            SBJ = "ICRF form with the name "+ICRF_Name+".csv already exists in the FCAT temporary staging folder."
+            MSG_BODY = "FCAT Process was Stopped."
+            mail_to_user(SBJ,MSG_BODY,Mail_Str)
+            Form_Exist = True 
+        else:
+            shutil.copy(ICRF_FileName, Target_Env_Location+"\\"+ICRF_Name+".csv")
+        
+        if Form_Exist == False : 
+            SBJ="FCAT process is completed for:"+ICRF_Name_Temp+".csv." 
+            MSG="Code review is successful. No issues found for the given objects. FCAT transferred the ICRF form to DIS Self-Service staging area. DIS Self-Service process picks the ICRF form in the next Self-Service interval and will perform migration."+"\n"+"\n"+"Unique Identifier-"+Unique_Identifier_Info+"\n"+"\n"
+            mail_to_user(SBJ,MSG,Mail_Str)
+            Source_Location_ca = ICRF_FileName
+            if os.path.isfile(Source_Location_ca) == True : 
+                Target_Location_Ca = Target_Location
+                shutil.copy(Source_Location_ca,Target_Location_Ca)
+        Proceed_Mig = "YES"
+    End_Process(ICRF_FileName)
+    
+    '''-------------------------------------------------------------------------------
+    'Logic to track the metrics details
+    '-------------------------------------------------------------------------------'''
+    if Form_Exist == False :
+        TimeStamp = Time_Stamp()
+        end=dt.datetime.today()
+        End_Time=end.strftime('%H:%M:%S')
+        Process_Time = dt.datetime.strptime(End_Time, '%H:%M:%S') - dt.datetime.strptime(Start_Time, '%H:%M:%S')
+        Log_count = Sh_count + Xml_count
+        DBA_Process_Results = DBA_Process_Results_Err
+        '''-----------------------------------------------------------------
+        'Create a bteq file to load the metrics details into the CA_METRICS
+        '------------------------------------------------------------------'''
+        Metrics_Bteq = CAPATH+"\ICRF_BTEQ_TMP_D\\"+ICRF_Name+"_Metrics_BTEQ_"+TimeStamp+".btq"
+        Metrics_Bteq_File = open(Metrics_Bteq, 'w')
+        if Mig_Base_Flag == True :
+            EXCEPTION_APPROVALl = "OLD"
+        elif Mig_Excp_Flag == True :
+            EXCEPTION_APPROVALl = "EXCP"
+        else:
+            EXCEPTION_APPROVALl = "NA"
+        ASSESSMENT_TYPE = "FCAT"
+        
+        Temp_WO_Str = ICRF_Name[4:]
+        if  Temp_WO_Str.find("D") > 0 :
+            Form_WO_Number = ICRF_Name[:ICRF_Name.find("D")]
+        elif Temp_WO_Str.find("I") > 0 :
+            Form_WO_Number = ICRF_Name[:ICRF_Name.rfind("I")]
+        elif Temp_WO_Str.find("B") > 0 :
+            Form_WO_Number = ICRF_Name[:ICRF_Name.find("B")]
+        elif Temp_WO_Str.find("O") > 0 :
+            Form_WO_Number = ICRF_Name[:ICRF_Name.find("O")]
+        Other_Metrics_Data = CAPATH+"\ICRF_LIST_D\\"+Form_WO_Number+".txt"
+        OTHER_FILES_COUNT = 0
+        Mtr_Tmp_Arr = []
+        if os.path.isfile(Other_Metrics_Data) == True :
+            with open(Other_Metrics_Data,'r') as Other_Metrics_File:
+                 Temp_Mtr_str = Other_Metrics_File.readlines()
+            Mtdx = 0
+            
+            for Mtdx in range(len(Temp_Mtr_str)):
+                Mtr_Tmp = Temp_Mtr_str[Mtdx].split("|")
+                Mtr_Tmp_Arr.append(Mtr_Tmp[1])
+                Mtdx = Mtdx + 1
+            Other_Metrics_File_1 = open(Other_Metrics_Data,'w')
+            for Mt in range(len(Mtr_Tmp_Arr)):
+                Other_Metrics_File_1.write(Unique_Identifier_Info+"|"+Mtr_Tmp_Arr[Mt].strip()+"\n")
+            Other_Metrics_File_1.close()
+            OTHER_FILES_COUNT = len(Mtr_Tmp_Arr)
+        Metrics_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+        Metrics_Bteq_File.write(".SET WIDTH 65531;\n")    
+        Metrics_Bteq_File.write(".SET ERROROUT STDOUT;\n")
+        Metrics_Bteq_File.write("\n\n")
+        Metrics_Bteq_File.write("DATABASE EDW_V20_CODE_REVIEW_OUT;\n")
+        Metrics_Bteq_File.write("\n")
+        Metrics_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+        Metrics_Bteq_File.write("\n")
+        Metrics_Bteq_File.write("INSERT INTO CA_METRICS ( User_Id, PLAN_VIEW_ID, ICRF_FORM_NAME, NUMBER_OF_LOGS, ERRORS, START_TIME, END_TIME,PROCESS_TIME, RUN_DATE, DBA_PROCESS_RESULTS, NUMBER_OF_XMLS, NUMBER_OF_BTEQS,TECHLEAD_ID, WO_NUMBER,IM_IMPL_REVIEW_DATE, TARGET_SERVER_OR_REPOSITORY, UNIQUE_IDENTIFIER, SELF_SERVICE_STAGING_AREA, EXCEPTION_APPROVALl, ASSESSMENT_TYPE, OTHER_FILES_COUNT, BAROMETER_ID, BAMBOO_PLAN_APPLICATION_NAME, COMPUTER_NAME ) \n")
+        Metrics_Bteq_File.write("VALUES (\n")
+        Metrics_Bteq_File.write("'"+User_Id+"'"+",\n")
+        Metrics_Bteq_File.write("'"+PLAN_VIEW_ID+"'"+",\n")
+        Metrics_Bteq_File.write("'"+ICRF_Name+"'"+",\n")
+        Metrics_Bteq_File.write(str(Log_count)+",\n")
+        Metrics_Bteq_File.write(str(Errors)+",\n")
+        Metrics_Bteq_File.write("'"+Start_Time+"'"+",\n")
+        Metrics_Bteq_File.write("'"+End_Time+"'"+",\n")
+        Metrics_Bteq_File.write("'"+str(Process_Time)+"'"+",\n")
+        Metrics_Bteq_File.write("'"+Run_Date+"'"+",\n")
+        Metrics_Bteq_File.write(str(DBA_Process_Results)+",\n")
+        Metrics_Bteq_File.write(str(Xml_count)+",\n")
+        Metrics_Bteq_File.write(str(Sh_count)+",\n")
+        Metrics_Bteq_File.write("'"+Team_Lead_Id+"'"+",\n")
+        Metrics_Bteq_File.write("'"+Work_Order_No+"'"+",\n")
+        Metrics_Bteq_File.write("'"+IM_IMP_Date+"'"+",\n")
+        Metrics_Bteq_File.write("'"+Target_Server+"'"+",\n")
+        Metrics_Bteq_File.write("'"+Unique_Identifier_Info+"'"+",\n")
+        Metrics_Bteq_File.write("'"+Target_Environment_Tmp+"'"+",\n")
+        Metrics_Bteq_File.write("'"+EXCEPTION_APPROVALl+"'"+",\n")
+        Metrics_Bteq_File.write("'"+ASSESSMENT_TYPE+"'"+",\n")
+        Metrics_Bteq_File.write(str(OTHER_FILES_COUNT)+",\n")
+        Metrics_Bteq_File.write("'"+Barometer_Id+"'"+",\n")
+        Metrics_Bteq_File.write("'"+Bamboo_Application_Name+"'"+",\n")
+        Metrics_Bteq_File.write("'PY-"+usrComputerName+"'"+");\n")
+        Metrics_Bteq_File.write("\n") 
+        Metrics_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+        Metrics_Bteq_File.write("\n")
+        
+        '''-----------------------------------------------------------------
+        'Logic to load the metrics details from the data file
+        '-----------------------------------------------------------------'''
+        Metrics_Bteq_File.write(".IMPORT VARTEXT '|' FILE="+Metrics_Data+"\n")
+        Metrics_Bteq_File.write(".QUIET ON\n")
+        Metrics_Bteq_File.write(".REPEAT *\n")
+        Metrics_Bteq_File.write("USING UNIQUE_IDENTIFIER (VARCHAR(100)), BTEQ_XML_LOGONID (VARCHAR(255)), ERROR_CODE (VARCHAR(20)), ERRORCODE_OCCURRENCE (VARCHAR(20))\n")
+        Metrics_Bteq_File.write ("INSERT INTO EDW_V20_CODE_REVIEW_OUT.CA_ERRORCODE_OCCURRENCE ( UNIQUE_IDENTIFIER, BTEQ_XML_LOGONID, ERROR_CODE, ERRORCODE_OCCURRENCE )\n")
+        Metrics_Bteq_File.write("VALUES (\n")
+        Metrics_Bteq_File.write(":UNIQUE_IDENTIFIER, :BTEQ_XML_LOGONID, :ERROR_CODE, :ERRORCODE_OCCURRENCE );\n")
+        
+        Metrics_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+        '''-----------------------------------------------------------------
+        'Logic to load the other files metrics details from the data file
+        '-----------------------------------------------------------------'''
+        if OTHER_FILES_COUNT > 0 :
+            Metrics_Bteq_File.write(".IMPORT VARTEXT '|' FILE="+Other_Metrics_Data+"\n")
+            Metrics_Bteq_File.write(".QUIET ON\n")
+            Metrics_Bteq_File.write(".REPEAT *\n")
+            Metrics_Bteq_File.write("USING UNIQUE_IDENTIFIER (VARCHAR(100)),  FILE_NAME (VARCHAR(255))\n")
+            Metrics_Bteq_File.write ("INSERT INTO EDW_V20_CODE_REVIEW_OUT.CA_NO_FCAT ( UNIQUE_IDENTIFIER, FILE_NAME )\n")
+            Metrics_Bteq_File.write("VALUES (\n")
+            Metrics_Bteq_File.write(":UNIQUE_IDENTIFIER, :FILE_NAME );\n")
+            Metrics_Bteq_File.write(".IF ERRORCODE <> 0 THEN .GOTO ERRORS\n")
+        Metrics_Bteq_File.write("\n")
+        Metrics_Bteq_File.write(".LOGOFF\n")
+        Metrics_Bteq_File.write(".QUIT 0\n")
+        Metrics_Bteq_File.write(".lABEL ERRORS\n")
+        Metrics_Bteq_File.write(".QUIT ERRORCODE\n")
+        Metrics_Bteq_File.close()
+        
+        Bteq_log = CAPATH+"\ICRF_BTEQ_LOGS_D\\"+ICRF_Name+"_Metrics_BTEQ_"+TimeStamp+".txt"
+        
+        input = open(Metrics_Bteq, 'rb').read()
+        rc = Popen(['bteq.exe',TD_IP_Str], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+        out, err = rc.communicate(input=input)
+        with open(Bteq_log, "w") as outfile:
+            outfile.write(out.decode())
+        return_Code = rc.returncode    
+        if return_Code > 0 :
+            try:
+                os.remove(Metrics_Bteq)
+            except Exception:
+                pass
+            try:
+                os.remove(Summary_Metrics_Bteq)
+            except Exception:
+                pass
+            try:
+                os.remove(Bteq_log)
+            except Exception:
+                pass
+            try:
+                os.remove(Metrics_Data)
+            except Exception:
+                pass
+            SBJ=User_Id+" FCAT_METRICS LOAD FAILED FOR THE FORM: "+ICRF_Name_Temp+" ,WITH RETURN CODE:"+str(return_Code)
+            MSG_BODY="FCAT_METRICS DETAILS ARE NOT LOADED"
+            Mail_Str="DL-IMCodeAssessSupp@anthem.com"
+            mail_to_user(SBJ,MSG_BODY,Mail_Str)
+            sys.exit(0)
+        else:
+            try:
+                os.remove(Metrics_Bteq)
+            except Exception:
+                pass
+            try:
+                os.remove(Bteq_log)
+            except Exception:
+                pass
+            try:
+                os.remove(Metrics_Data)
+            except Exception:
+                pass
+            pass
+        if os.path.isfile(Other_Metrics_Data) == True :
+            try:
+                os.remove(Other_Metrics_Data)
+            except Exception:
+                pass
+        sys.exit(0)
+    ObjListFile.close()
+except Exception:
+    sys.exit("FCAT - Unexpected error:" , sys.exc_info()[1])
